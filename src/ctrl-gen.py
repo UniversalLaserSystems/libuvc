@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import print_function
 from collections import OrderedDict
 import getopt
@@ -274,7 +274,7 @@ if __name__ == '__main__':
         for input_file in inputs:
             with open(input_file, "r") as fp:
                 units = yaml.load(fp)['units']
-                for unit_name, unit_details in units.iteritems():
+                for unit_name, unit_details in units.items():
                     yield unit_name, unit_details
 
     if mode == 'def':
@@ -297,6 +297,6 @@ static const int REQ_TYPE_GET = 0xa1;
         sys.exit(0)
 
     for unit_name, unit_details in iterunits():
-        for control_name, control_details in unit_details['controls'].iteritems():
+        for control_name, control_details in unit_details['controls'].items():
             code = fun(unit_name, unit_details, control_name, control_details)
             print(code)
