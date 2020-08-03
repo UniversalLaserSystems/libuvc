@@ -102,8 +102,8 @@ void *_uvc_handle_events(void *arg) {
  * @return Error opening context or UVC_SUCCESS
  */
 uvc_error_t uvc_init(uvc_context_t **pctx, struct libusb_context *usb_ctx) {
-  uvc_error_t ret = UVC_SUCCESS;
-  uvc_context_t *ctx = calloc(1, sizeof(*ctx));
+  int ret = UVC_SUCCESS;
+  uvc_context_t *ctx = (uvc_context_t *)calloc(1, sizeof(*ctx));
 
   if (usb_ctx == NULL) {
     ret = libusb_init(&ctx->usb_ctx);
@@ -120,7 +120,7 @@ uvc_error_t uvc_init(uvc_context_t **pctx, struct libusb_context *usb_ctx) {
   if (ctx != NULL)
     *pctx = ctx;
 
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /**

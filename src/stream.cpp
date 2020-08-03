@@ -166,10 +166,10 @@ static uint8_t _uvc_frame_format_matches_guid(enum uvc_frame_format fmt, uint8_t
 
 static enum uvc_frame_format uvc_frame_format_for_guid(uint8_t guid[16]) {
   struct format_table_entry *format;
-  enum uvc_frame_format fmt;
+  int fmt;
 
   for (fmt = 0; fmt < UVC_FRAME_FORMAT_COUNT; ++fmt) {
-    format = _get_format_entry(fmt);
+    format = _get_format_entry(static_cast<enum uvc_frame_format>(fmt));
     if (!format || format->abstract_fmt)
       continue;
     if (!memcmp(format->guid, guid, 16))
@@ -193,7 +193,7 @@ uvc_error_t uvc_query_stream_ctrl(
     enum uvc_req_code req) {
   uint8_t buf[34];
   size_t len;
-  uvc_error_t err;
+  int err;
 
   memset(buf, 0, sizeof(buf));
 
@@ -237,7 +237,7 @@ uvc_error_t uvc_query_stream_ctrl(
   );
 
   if (err <= 0) {
-    return err;
+    return static_cast<uvc_error_t>(err);
   }
 
   /* now decode following a GET transfer */
@@ -293,7 +293,7 @@ uvc_error_t uvc_query_still_ctrl(
 
   uint8_t buf[11];
   const size_t len = 11;
-  uvc_error_t err;
+  int err;
 
   memset(buf, 0, sizeof(buf));
 
@@ -317,7 +317,7 @@ uvc_error_t uvc_query_still_ctrl(
   );
 
   if (err <= 0) {
-    return err;
+    return static_cast<uvc_error_t>(err);
   }
 
   /* now decode following a GET transfer */
@@ -344,7 +344,7 @@ uvc_error_t uvc_trigger_still(
   uvc_stream_handle_t* stream;
   uvc_streaming_interface_t* stream_if;
   uint8_t buf;
-  uvc_error_t err;
+  int err;
 
   /* Stream must be running for method 2 to work */
   stream = _uvc_get_stream_by_interface(devh, still_ctrl->bInterfaceNumber);
@@ -369,7 +369,7 @@ uvc_error_t uvc_trigger_still(
       &buf, 1, 0);
 
   if (err <= 0) {
-    return err;
+    return static_cast<uvc_error_t>(err);
   }
 
   return UVC_SUCCESS;
@@ -635,7 +635,7 @@ uvc_error_t uvc_probe_still_ctrl(
     }
   }
 
-  return res;
+  return static_cast<uvc_error_t>(res);
 }
 
 /** @internal
@@ -787,7 +787,7 @@ void _uvc_process_payload(uvc_stream_handle_t *strmh, uint8_t *payload, size_t p
  * @param transfer Active transfer
  */
 void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
-  uvc_stream_handle_t *strmh = transfer->user_data;
+  uvc_stream_handle_t *strmh = (uvc_stream_handle_t *)transfer->user_data;
 
   int resubmit = 1;
 
@@ -1005,7 +1005,7 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
     goto fail;
   }
 
-  strmh = calloc(1, sizeof(*strmh));
+  strmh = (uvc_stream_handle_t *)calloc(1, sizeof(*strmh));
   if (!strmh) {
     ret = UVC_ERROR_NO_MEM;
     goto fail;
@@ -1025,11 +1025,11 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
   // Set up the streaming status and data space
   strmh->running = 0;
   /** @todo take only what we need */
-  strmh->outbuf = malloc( LIBUVC_XFER_BUF_SIZE );
-  strmh->holdbuf = malloc( LIBUVC_XFER_BUF_SIZE );
+  strmh->outbuf = (uint8_t *)malloc( LIBUVC_XFER_BUF_SIZE );
+  strmh->holdbuf = (uint8_t *)malloc( LIBUVC_XFER_BUF_SIZE );
 
-  strmh->meta_outbuf = malloc( LIBUVC_XFER_META_BUF_SIZE );
-  strmh->meta_holdbuf = malloc( LIBUVC_XFER_META_BUF_SIZE );
+  strmh->meta_outbuf = (uint8_t *)malloc( LIBUVC_XFER_META_BUF_SIZE );
+  strmh->meta_holdbuf = (uint8_t *)malloc( LIBUVC_XFER_META_BUF_SIZE );
    
   pthread_mutex_init(&strmh->cb_mutex, NULL);
   pthread_cond_init(&strmh->cb_cond, NULL);
@@ -1069,7 +1069,7 @@ uvc_error_t uvc_stream_start(
   uvc_frame_desc_t *frame_desc;
   uvc_format_desc_t *format_desc;
   uvc_stream_ctrl_t *ctrl;
-  uvc_error_t ret;
+  int ret;
   /* Total amount of data per transfer */
   size_t total_transfer_size = 0;
   struct libusb_transfer *transfer;
@@ -1193,7 +1193,7 @@ uvc_error_t uvc_stream_start(
     for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; ++transfer_id) {
       transfer = libusb_alloc_transfer(packets_per_transfer);
       strmh->transfers[transfer_id] = transfer;      
-      strmh->transfer_bufs[transfer_id] = malloc(total_transfer_size);
+      strmh->transfer_bufs[transfer_id] = (uint8_t *)malloc(total_transfer_size);
 
       libusb_fill_iso_transfer(
         transfer, strmh->devh->usb_devh, format_desc->parent->bEndpointAddress,
@@ -1207,7 +1207,7 @@ uvc_error_t uvc_stream_start(
         ++transfer_id) {
       transfer = libusb_alloc_transfer(0);
       strmh->transfers[transfer_id] = transfer;
-      strmh->transfer_bufs[transfer_id] = malloc (
+      strmh->transfer_bufs[transfer_id] = (uint8_t *)malloc (
           strmh->cur_ctrl.dwMaxPayloadTransferSize );
       libusb_fill_bulk_transfer ( transfer, strmh->devh->usb_devh,
           format_desc->parent->bEndpointAddress,
@@ -1246,11 +1246,11 @@ uvc_error_t uvc_stream_start(
   }
 
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 fail:
   strmh->running = 0;
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /** Begin streaming video from the stream into the callback function.

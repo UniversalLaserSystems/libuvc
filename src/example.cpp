@@ -2,12 +2,7 @@
 //
 // Also did these steps:
 //
-//   1. sudo apt install libuvc0 libuvc-dev libuvc-doc
-//   2. sudo apt install libgtk2.0-dev
-//   3. Checked out UCP2/trunk; edited third-party/CMakeLists.txt
-//      a. enable WITH_GTK* options
-//      b. enable WITH_QT   options (not sure if required)
-//   4. Edit CMakeLists.txt in this directory with path to your OpenCV: /home/vagrant/uls/lsm/third-party/install
+//   * sudo apt install libgtk2.0-dev
 //
 // mkdir build && cd build
 // cmake -G "Unix Makefiles" ..
@@ -16,7 +11,7 @@
 // Plugin camera
 //  1. Use lsusb to find your camera bus and device number
 //  2. sudo chmod 666 /dev/bus/<bus>/<device>       # so libusb can access device
-//  3. ./libuvc-example
+//  3. ./example
 
 
 #ifdef _WIN32

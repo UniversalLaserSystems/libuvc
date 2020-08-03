@@ -134,7 +134,7 @@ static uvc_error_t uvc_mjpeg_convert(uvc_frame_t *in, uvc_frame_t *out) {
   }
 
   jpeg_create_decompress(&dinfo);
-  jpeg_mem_src(&dinfo, in->data, in->data_bytes);
+  jpeg_mem_src(&dinfo, (const unsigned char*)in->data, in->data_bytes);
   jpeg_read_header(&dinfo, TRUE);
 
   if (dinfo.dc_huff_tbl_ptrs[0] == NULL) {
@@ -164,7 +164,7 @@ static uvc_error_t uvc_mjpeg_convert(uvc_frame_t *in, uvc_frame_t *out) {
 
   jpeg_finish_decompress(&dinfo);
   jpeg_destroy_decompress(&dinfo);
-  return 0;
+  return UVC_SUCCESS;
 
 fail:
   jpeg_destroy_decompress(&dinfo);

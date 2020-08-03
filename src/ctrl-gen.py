@@ -84,7 +84,7 @@ GETTER_TEMPLATE = """/** @ingroup ctrl
  */
 uvc_error_t uvc_get_{control_name}(uvc_device_handle_t *devh, {args_signature}, enum uvc_req_code req_code) {{
   uint8_t data[{control_length}];
-  uvc_error_t ret;
+  int ret;
 
   ret = libusb_control_transfer(
     devh->usb_devh,
@@ -99,7 +99,7 @@ uvc_error_t uvc_get_{control_name}(uvc_device_handle_t *devh, {args_signature}, 
     {unpack}
     return UVC_SUCCESS;
   }} else {{
-    return ret;
+    return static_cast<uvc_error_t>(ret);
   }}
 }}
 """
@@ -111,7 +111,7 @@ SETTER_TEMPLATE = """/** @ingroup ctrl
  */
 uvc_error_t uvc_set_{control_name}(uvc_device_handle_t *devh, {args_signature}) {{
   uint8_t data[{control_length}];
-  uvc_error_t ret;
+  int ret;
 
   {pack}
 
@@ -127,7 +127,7 @@ uvc_error_t uvc_set_{control_name}(uvc_device_handle_t *devh, {args_signature}) 
   if (ret == sizeof(data))
     return UVC_SUCCESS;
   else
-    return ret;
+    return static_cast<uvc_error_t>(ret);
 }}
 """
 

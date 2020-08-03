@@ -212,7 +212,7 @@ uvc_error_t uvc_find_devices(
   dev_idx = 0;
   found_dev = 0;
 
-  list_internal = malloc(sizeof(*list_internal));
+  list_internal = (uvc_device_t**)malloc(sizeof(*list_internal));
   *list_internal = NULL;
 
   while ((test_dev = list[dev_idx++]) != NULL) {
@@ -228,7 +228,7 @@ uvc_error_t uvc_find_devices(
       uvc_ref_device(test_dev);
 
       num_uvc_devices++;
-      list_internal = realloc(list_internal, (num_uvc_devices + 1) * sizeof(*list_internal));
+      list_internal = (uvc_device_t**)realloc(list_internal, (num_uvc_devices + 1) * sizeof(*list_internal));
 
       list_internal[num_uvc_devices - 1] = test_dev;
       list_internal[num_uvc_devices] = NULL;
@@ -273,7 +273,7 @@ uint8_t uvc_get_device_address(uvc_device_t *dev) {
 uvc_error_t uvc_open(
     uvc_device_t *dev,
     uvc_device_handle_t **devh) {
-  uvc_error_t ret;
+  int ret;
   struct libusb_device_handle *usb_devh;
   uvc_device_handle_t *internal_devh;
   struct libusb_device_descriptor desc;
@@ -285,12 +285,12 @@ uvc_error_t uvc_open(
 
   if (ret != UVC_SUCCESS) {
     UVC_EXIT(ret);
-    return ret;
+    return static_cast<uvc_error_t>(ret);
   }
 
   uvc_ref_device(dev);
 
-  internal_devh = calloc(1, sizeof(*internal_devh));
+  internal_devh = (uvc_device_handle_t *)calloc(1, sizeof(*internal_devh));
   internal_devh->dev = dev;
   internal_devh->usb_devh = usb_devh;
 
@@ -342,7 +342,7 @@ uvc_error_t uvc_open(
 
   UVC_EXIT(ret);
 
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 
  fail:
   if ( internal_devh->info ) {
@@ -354,7 +354,7 @@ uvc_error_t uvc_open(
 
   UVC_EXIT(ret);
 
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /**
@@ -373,7 +373,7 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
 
   UVC_ENTER();
 
-  internal_info = calloc(1, sizeof(*internal_info));
+  internal_info = (uvc_device_info_t *)calloc(1, sizeof(*internal_info));
   if (!internal_info) {
     UVC_EXIT(UVC_ERROR_NO_MEM);
     return UVC_ERROR_NO_MEM;
@@ -491,7 +491,7 @@ uvc_error_t uvc_get_device_descriptor(
   uvc_device_descriptor_t *desc_internal;
   struct libusb_device_descriptor usb_desc;
   struct libusb_device_handle *usb_devh;
-  uvc_error_t ret;
+  int ret;
 
   UVC_ENTER();
 
@@ -499,10 +499,10 @@ uvc_error_t uvc_get_device_descriptor(
 
   if (ret != UVC_SUCCESS) {
     UVC_EXIT(ret);
-    return ret;
+    return static_cast<uvc_error_t>(ret);
   }
 
-  desc_internal = calloc(1, sizeof(*desc_internal));
+  desc_internal = (uvc_device_descriptor_t *)calloc(1, sizeof(*desc_internal));
   desc_internal->idVendor = usb_desc.idVendor;
   desc_internal->idProduct = usb_desc.idProduct;
 
@@ -536,7 +536,7 @@ uvc_error_t uvc_get_device_descriptor(
   *desc = desc_internal;
 
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /**
@@ -606,7 +606,7 @@ uvc_error_t uvc_get_device_list(
     return UVC_ERROR_IO;
   }
 
-  list_internal = malloc(sizeof(*list_internal));
+  list_internal = (uvc_device_t **)malloc(sizeof(*list_internal));
   *list_internal = NULL;
 
   num_uvc_devices = 0;
@@ -658,14 +658,14 @@ uvc_error_t uvc_get_device_list(
     libusb_free_config_descriptor(config);
 
     if (got_interface) {
-      uvc_device_t *uvc_dev = malloc(sizeof(*uvc_dev));
+      uvc_device_t *uvc_dev = (uvc_device_t *)malloc(sizeof(*uvc_dev));
       uvc_dev->ctx = ctx;
       uvc_dev->ref = 0;
       uvc_dev->usb_dev = usb_dev;
       uvc_ref_device(uvc_dev);
 
       num_uvc_devices++;
-      list_internal = realloc(list_internal, (num_uvc_devices + 1) * sizeof(*list_internal));
+      list_internal = (uvc_device_t **)realloc(list_internal, (num_uvc_devices + 1) * sizeof(*list_internal));
 
       list_internal[num_uvc_devices - 1] = uvc_dev;
       list_internal[num_uvc_devices] = NULL;
@@ -875,7 +875,7 @@ uvc_error_t uvc_claim_if(uvc_device_handle_t *devh, int idx) {
   if ( devh->claimed & ( 1 << idx )) {
     UVC_DEBUG("attempt to claim already-claimed interface %d\n", idx );
     UVC_EXIT(ret);
-    return ret;
+    return static_cast<uvc_error_t>(ret);
   }
 
   /* Tell libusb to detach any active kernel drivers. libusb will keep track of whether
@@ -893,7 +893,7 @@ uvc_error_t uvc_claim_if(uvc_device_handle_t *devh, int idx) {
   }
 
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /** @internal
@@ -911,7 +911,7 @@ uvc_error_t uvc_release_if(uvc_device_handle_t *devh, int idx) {
   if (!( devh->claimed & ( 1 << idx ))) {
     UVC_DEBUG("attempt to release unclaimed interface %d\n", idx );
     UVC_EXIT(ret);
-    return ret;
+    return static_cast<uvc_error_t>(ret);
   }
 
   /* libusb_release_interface *should* reset the alternate setting to the first available,
@@ -936,7 +936,7 @@ uvc_error_t uvc_release_if(uvc_device_handle_t *devh, int idx) {
   }
 
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /** @internal
@@ -1068,10 +1068,10 @@ uvc_error_t uvc_parse_vc_input_terminal(uvc_device_t *dev,
     return UVC_SUCCESS;
   }
 
-  term = calloc(1, sizeof(*term));
+  term = (uvc_input_terminal_t *)calloc(1, sizeof(*term));
 
   term->bTerminalID = block[3];
-  term->wTerminalType = SW_TO_SHORT(&block[4]);
+  term->wTerminalType = (uvc_it_type)SW_TO_SHORT(&block[4]);
   term->wObjectiveFocalLengthMin = SW_TO_SHORT(&block[8]);
   term->wObjectiveFocalLengthMax = SW_TO_SHORT(&block[10]);
   term->wOcularFocalLength = SW_TO_SHORT(&block[12]);
@@ -1097,7 +1097,7 @@ uvc_error_t uvc_parse_vc_processing_unit(uvc_device_t *dev,
 
   UVC_ENTER();
 
-  unit = calloc(1, sizeof(*unit));
+  unit = (uvc_processing_unit_t *)calloc(1, sizeof(*unit));
   unit->bUnitID = block[3];
   unit->bSourceID = block[4];
 
@@ -1121,7 +1121,7 @@ uvc_error_t uvc_parse_vc_selector_unit(uvc_device_t *dev,
 
   UVC_ENTER();
 
-  unit = calloc(1, sizeof(*unit));
+  unit = (uvc_selector_unit_t *)calloc(1, sizeof(*unit));
   unit->bUnitID = block[3];
 
   DL_APPEND(info->ctrl_if.selector_unit_descs, unit);
@@ -1137,7 +1137,7 @@ uvc_error_t uvc_parse_vc_selector_unit(uvc_device_t *dev,
 uvc_error_t uvc_parse_vc_extension_unit(uvc_device_t *dev,
 					uvc_device_info_t *info,
 					const unsigned char *block, size_t block_size) {
-  uvc_extension_unit_t *unit = calloc(1, sizeof(*unit));
+  uvc_extension_unit_t *unit = (uvc_extension_unit_t *)calloc(1, sizeof(*unit));
   const uint8_t *start_of_controls;
   int size_of_controls, num_in_pins;
   int i;
@@ -1227,7 +1227,7 @@ uvc_error_t uvc_scan_streaming(uvc_device_t *dev,
   buffer = if_desc->extra;
   buffer_left = if_desc->extra_length;
 
-  stream_if = calloc(1, sizeof(*stream_if));
+  stream_if = (uvc_streaming_interface_t *)calloc(1, sizeof(*stream_if));
   stream_if->parent = info;
   stream_if->bInterfaceNumber = if_desc->bInterfaceNumber;
   DL_APPEND(info->stream_ifs, stream_if);
@@ -1275,10 +1275,10 @@ uvc_error_t uvc_parse_vs_format_uncompressed(uvc_streaming_interface_t *stream_i
 					     size_t block_size) {
   UVC_ENTER();
 
-  uvc_format_desc_t *format = calloc(1, sizeof(*format));
+  uvc_format_desc_t *format = (uvc_format_desc_t *)calloc(1, sizeof(*format));
 
   format->parent = stream_if;
-  format->bDescriptorSubtype = block[2];
+  format->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
   format->bFormatIndex = block[3];
   //format->bmCapabilities = block[4];
   //format->bmFlags = block[5];
@@ -1305,10 +1305,10 @@ uvc_error_t uvc_parse_vs_frame_format(uvc_streaming_interface_t *stream_if,
 					     size_t block_size) {
   UVC_ENTER();
 
-  uvc_format_desc_t *format = calloc(1, sizeof(*format));
+  uvc_format_desc_t *format = (uvc_format_desc_t *)calloc(1, sizeof(*format));
 
   format->parent = stream_if;
-  format->bDescriptorSubtype = block[2];
+  format->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
   format->bFormatIndex = block[3];
   format->bNumFrameDescriptors = block[4];
   memcpy(format->guidFormat, &block[5], 16);
@@ -1335,10 +1335,10 @@ uvc_error_t uvc_parse_vs_format_mjpeg(uvc_streaming_interface_t *stream_if,
 					     size_t block_size) {
   UVC_ENTER();
 
-  uvc_format_desc_t *format = calloc(1, sizeof(*format));
+  uvc_format_desc_t *format = (uvc_format_desc_t *)calloc(1, sizeof(*format));
 
   format->parent = stream_if;
-  format->bDescriptorSubtype = block[2];
+  format->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
   format->bFormatIndex = block[3];
   memcpy(format->fourccFormat, "MJPG", 4);
   format->bmFlags = block[5];
@@ -1371,11 +1371,11 @@ uvc_error_t uvc_parse_vs_frame_frame(uvc_streaming_interface_t *stream_if,
   UVC_ENTER();
 
   format = stream_if->format_descs->prev;
-  frame = calloc(1, sizeof(*frame));
+  frame = (uvc_frame_desc_t *)calloc(1, sizeof(*frame));
 
   frame->parent = format;
 
-  frame->bDescriptorSubtype = block[2];
+  frame->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
   frame->bFrameIndex = block[3];
   frame->bmCapabilities = block[4];
   frame->wWidth = block[5] + (block[6] << 8);
@@ -1391,7 +1391,7 @@ uvc_error_t uvc_parse_vs_frame_frame(uvc_streaming_interface_t *stream_if,
     frame->dwMaxFrameInterval = DW_TO_INT(&block[30]);
     frame->dwFrameIntervalStep = DW_TO_INT(&block[34]);
   } else {
-    frame->intervals = calloc(block[21] + 1, sizeof(frame->intervals[0]));
+    frame->intervals = (uint32_t*)calloc(block[21] + 1, sizeof(frame->intervals[0]));
     p = &block[26];
 
     for (i = 0; i < block[21]; ++i) {
@@ -1423,11 +1423,11 @@ uvc_error_t uvc_parse_vs_frame_uncompressed(uvc_streaming_interface_t *stream_if
   UVC_ENTER();
 
   format = stream_if->format_descs->prev;
-  frame = calloc(1, sizeof(*frame));
+  frame = (uvc_frame_desc_t *)calloc(1, sizeof(*frame));
 
   frame->parent = format;
 
-  frame->bDescriptorSubtype = block[2];
+  frame->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
   frame->bFrameIndex = block[3];
   frame->bmCapabilities = block[4];
   frame->wWidth = block[5] + (block[6] << 8);
@@ -1443,7 +1443,7 @@ uvc_error_t uvc_parse_vs_frame_uncompressed(uvc_streaming_interface_t *stream_if
     frame->dwMaxFrameInterval = DW_TO_INT(&block[30]);
     frame->dwFrameIntervalStep = DW_TO_INT(&block[34]);
   } else {
-    frame->intervals = calloc(block[25] + 1, sizeof(frame->intervals[0]));
+    frame->intervals = (uint32_t *)calloc(block[25] + 1, sizeof(frame->intervals[0]));
     p = &block[26];
 
     for (i = 0; i < block[25]; ++i) {
@@ -1476,11 +1476,11 @@ uvc_error_t uvc_parse_vs_still_image_frame(uvc_streaming_interface_t *stream_if,
   UVC_ENTER();
 
   format = stream_if->format_descs->prev;
-  frame = calloc(1, sizeof(*frame));
+  frame = (uvc_still_frame_desc*)calloc(1, sizeof(*frame));
 
   frame->parent = format;
 
-  frame->bDescriptorSubtype = block[2];
+  frame->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
   frame->bEndPointAddress   = block[3];
   uint8_t numImageSizePatterns = block[4];
 
@@ -1489,7 +1489,7 @@ uvc_error_t uvc_parse_vs_still_image_frame(uvc_streaming_interface_t *stream_if,
   p = &block[5];
 
   for (i = 1; i <= numImageSizePatterns; ++i) {
-    uvc_still_frame_res_t* res = calloc(1, sizeof(uvc_still_frame_res_t));
+    uvc_still_frame_res_t* res = (uvc_still_frame_res_t *)calloc(1, sizeof(uvc_still_frame_res_t));
     res->bResolutionIndex = i;
     res->wWidth = SW_TO_SHORT(p);
     p += 2;
@@ -1504,7 +1504,7 @@ uvc_error_t uvc_parse_vs_still_image_frame(uvc_streaming_interface_t *stream_if,
 
   if(frame->bNumCompressionPattern)
   {
-      frame->bCompression = calloc(frame->bNumCompressionPattern, sizeof(frame->bCompression[0]));
+    frame->bCompression = (uint8_t *)calloc(frame->bNumCompressionPattern, sizeof(frame->bCompression[0]));
       for(i = 0; i < frame->bNumCompressionPattern; ++i)
       {
           ++p;
@@ -1722,7 +1722,7 @@ void uvc_process_control_status(uvc_device_handle_t *devh, unsigned char *data, 
     return;
   }
 
-  attribute = data[4];
+  attribute = (uvc_status_attribute)data[4];
   content = data + 5;
   content_len = len - 5;
 
