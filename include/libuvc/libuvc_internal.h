@@ -12,6 +12,9 @@
 #include <pthread.h>
 #include <signal.h>
 #include <libusb.h>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include "utlist.h"
 
 /** Converts an unaligned four-byte little-endian integer into an int32 */
@@ -238,9 +241,9 @@ struct uvc_stream_handle {
   uint32_t last_scr, hold_last_scr;
   size_t got_bytes, hold_bytes;
   uint8_t *outbuf, *holdbuf;
-  pthread_mutex_t cb_mutex;
-  pthread_cond_t cb_cond;
-  pthread_t cb_thread;
+  std::mutex callback_mutex;
+  std::condition_variable callback_cond;
+  std::thread callback_thread;
   uint32_t last_polled_seq;
   uvc_frame_callback_t *user_cb;
   void *user_ptr;
