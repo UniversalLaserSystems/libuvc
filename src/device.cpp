@@ -1629,7 +1629,7 @@ void uvc_close(uvc_device_handle_t *devh) {
   if (ctx->own_usb_ctx && ctx->open_devices == devh && devh->next == NULL) {
     ctx->kill_handler_thread = 1;
     libusb_close(devh->usb_devh);
-    pthread_join(ctx->handler_thread, NULL);
+    ctx->handler_thread.join();
   } else {
     libusb_close(devh->usb_devh);
   }

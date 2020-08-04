@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <pthread.h>
 #include <signal.h>
 #include <libusb.h>
 #include <condition_variable>
@@ -291,7 +290,7 @@ struct uvc_context {
   uint8_t own_usb_ctx;
   /** List of open devices in this context */
   uvc_device_handle_t *open_devices;
-  pthread_t handler_thread;
+  std::thread handler_thread;
   int kill_handler_thread;
 };
 
