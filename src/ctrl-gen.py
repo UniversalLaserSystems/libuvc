@@ -278,7 +278,7 @@ if __name__ == '__main__':
                     yield unit_name, unit_details
 
     if mode == 'def':
-        print("""/* This is an AUTO-GENERATED file! Update it with the output of `ctrl-gen.py def`. */
+        print("""/* This is an AUTO-GENERATED file! Update it with the output of `./ctrl-gen.py --input ../standard-units.yaml def > ctrl-gen.cpp`. */
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
 
