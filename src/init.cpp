@@ -117,6 +117,8 @@ uvc_error_t uvc_init(uvc_context_t **pctx, struct libusb_context *usb_ctx) {
     ctx->usb_ctx = usb_ctx;
   }
 
+  libusb_set_option(ctx->usb_ctx, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+
   if (ctx != NULL)
     *pctx = ctx;
 

@@ -12,12 +12,10 @@ if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  set(JPEG_INCLUDE_DIR "C:/local/libjpeg-turbo/include")
-  set(JPEG_LIBRARY     "C:/local/libjpeg-turbo/lib/libjpeg-turbod.lib")
 endif()
 # ----------------------------------------------------------------------------]
 
-# Additional search scripts path for libusb-1.0, libjpeg, OpenCV
+# Additional search scripts path for libusb-1.0
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 # Xcode and Visual Studio do not using CMAKE_BUILD_TYPE cache variable
@@ -152,7 +150,6 @@ if(BUILD_EXAMPLE)
   add_executable(example src/example.cpp)
   find_package(Threads)
   find_package(OpenCV REQUIRED
-    COMPONENTS
       core
       highgui
     PATHS
@@ -160,7 +157,8 @@ if(BUILD_EXAMPLE)
   )
   target_link_libraries(example
     PRIVATE
-      LibUVC::UVC
+      uvc_static
+      LibUSB::LibUSB
       Threads::Threads
       opencv_core
       opencv_highgui
@@ -178,7 +176,10 @@ if(BUILD_TEST)
       ${OpenCV_ROOT}
   )
 
-  add_executable(uvc_test src/test.cpp)
+  add_executable(uvc_test
+    src/test.cpp
+    $<$<BOOL:${JPEG_FOUND}>:src/frame-mjpeg.cpp>
+  )
   target_link_libraries(uvc_test
     PRIVATE
       LibUVC::UVC
@@ -243,3 +244,15 @@ install(FILES libuvcConfig.cmake
 )
 
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  string(REGEX REPLACE "[.]lib" ".dll" LibUSB_DLL ${LibUSB_LIBRARY})
+  cmake_print_variables(LibUSB_LIBRARY LibUSB_DLL CMAKE_BINARY_DIR)
+  add_custom_command(TARGET example POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${LibUSB_LIBRARY} ${CMAKE_BINARY_DIR}/$<CONFIG>
+    COMMAND ${CMAKE_COMMAND} -E copy ${LibUSB_DLL}     ${CMAKE_BINARY_DIR}/$<CONFIG>
+    )
+  install (
+    FILES ${LibUSB_LIBRARY} ${LibUSB_DLL}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+endif()

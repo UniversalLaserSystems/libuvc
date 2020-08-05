@@ -5,15 +5,18 @@
 #ifndef LIBUVC_INTERNAL_H
 #define LIBUVC_INTERNAL_H
 
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
-#include <libusb.h>
+//#include <cassert>
+#include <cstdlib>
+//#include <cstdio>
+//#include <cstring>
+//#include <csignal>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#pragma warning (disable:4200)
+#include <libusb-1.0/libusb.h>
+#pragma warning (default:4200)
 #include "utlist.h"
 
 /** Converts an unaligned four-byte little-endian integer into an int32 */
@@ -51,22 +54,16 @@
   } while (0);
 
 #ifdef UVC_DEBUGGING
-#include <libgen.h>
-#define UVC_DEBUG(format, ...) fprintf(stderr, "[%s:%d/%s] " format "\n", basename(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__)
-#define UVC_ENTER() fprintf(stderr, "[%s:%d] begin %s\n", basename(__FILE__), __LINE__, __FUNCTION__)
-#define UVC_EXIT(code) fprintf(stderr, "[%s:%d] end %s (%d)\n", basename(__FILE__), __LINE__, __FUNCTION__, code)
-#define UVC_EXIT_VOID() fprintf(stderr, "[%s:%d] end %s\n", basename(__FILE__), __LINE__, __FUNCTION__)
+#define UVC_DEBUG(format, ...) fprintf(stderr, "[%s:%d/%s] " format "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#define UVC_ENTER() fprintf(stderr, "[%s:%d] begin %s\n", __FILE__, __LINE__, __func__)
+#define UVC_EXIT(code) fprintf(stderr, "[%s:%d] end %s (%d)\n", __FILE__, __LINE__, __func__, code)
+#define UVC_EXIT_VOID() fprintf(stderr, "[%s:%d] end %s\n", __FILE__, __LINE__, __func__)
 #else
 #define UVC_DEBUG(format, ...)
 #define UVC_ENTER()
 #define UVC_EXIT_VOID()
 #define UVC_EXIT(code)
 #endif
-
-/* http://stackoverflow.com/questions/19452971/array-size-macro-that-rejects-pointers */
-#define IS_INDEXABLE(arg) (sizeof(arg[0]))
-#define IS_ARRAY(arg) (IS_INDEXABLE(arg) && (((void *) &arg) == ((void *) arg)))
-#define ARRAYSIZE(arr) (sizeof(arr) / (IS_ARRAY(arr) ? sizeof(arr[0]) : 0))
 
 /** Video interface subclass code (A.2) */
 enum uvc_int_subclass_code {
@@ -250,7 +247,7 @@ struct uvc_stream_handle {
   uint8_t *transfer_bufs[LIBUVC_NUM_TRANSFER_BUFS];
   struct uvc_frame frame;
   enum uvc_frame_format frame_format;
-  struct timespec capture_time_finished;
+  std::chrono::steady_clock::time_point capture_time_finished;
 
   /* raw metadata buffer if available */
   uint8_t *meta_outbuf, *meta_holdbuf;

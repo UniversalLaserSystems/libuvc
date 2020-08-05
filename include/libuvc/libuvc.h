@@ -1,14 +1,14 @@
 #ifndef LIBUVC_H
 #define LIBUVC_H
 
+#include <chrono>
+#include <cstdio> // FILE
+#include <cstdint>
+#include <libuvc/libuvc_config.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdio.h> // FILE
-#include <stdint.h>
-#include <sys/time.h>
-#include <libuvc/libuvc_config.h>
 
 struct libusb_context;
 struct libusb_device_handle;
@@ -466,9 +466,9 @@ typedef struct uvc_frame {
   /** Frame number (may skip, but is strictly monotonically increasing) */
   uint32_t sequence;
   /** Estimate of system time when the device started capturing the image */
-  struct timeval capture_time;
+  std::chrono::steady_clock::time_point capture_time;
   /** Estimate of system time when the device finished receiving the image */
-  struct timespec capture_time_finished;
+  std::chrono::steady_clock::time_point capture_time_finished;
   /** Handle on the device that produced the image.
    * @warning You must not call any uvc_* functions during a callback. */
   uvc_device_handle_t *source;

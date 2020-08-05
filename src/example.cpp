@@ -21,7 +21,9 @@
 #endif
 
 #include <libuvc/libuvc.h>
+#pragma warning (disable:4200)
 #include <libusb-1.0/libusb.h>
+#pragma warning (default:4200)
 #include <opencv2/opencv.hpp>
 #include <opencv2/videoio/registry.hpp>
 #include <opencv2/core/types_c.h>
@@ -29,6 +31,8 @@
 #include <opencv2/highgui/highgui_c.h>
 #include <opencv2/core.hpp>
 #include <stdio.h>
+#include <chrono>
+#include <thread>
 
 /* This callback function runs once per frame. Use it to perform any
  * quick processing you need, or have it put the frame into your application's
@@ -87,9 +91,15 @@ int main(int argc, char **argv) {
   }
   puts("UVC initialized");
   /* Locates the first attached UVC device, stores in dev */
+#if 1
   res = uvc_find_device(
-      ctx, &dev,
-      0, 0, NULL); /* filter devices: vendor_id, product_id, "serial_num" */
+    ctx, &dev,
+    0, 0, NULL); /* filter devices: vendor_id, product_id, "serial_num" */
+#else
+  res = uvc_find_device(
+    ctx, &dev,
+    0x05a3, 0x2214, NULL); /* filter devices: vendor_id, product_id, "serial_num" */
+#endif
   if (res < 0) {
     uvc_perror(res, "uvc_find_device"); /* no devices found */
   } else {
@@ -100,14 +110,6 @@ int main(int argc, char **argv) {
       uvc_perror(res, "uvc_open"); /* unable to open device */
     } else {
       puts("Device opened");
-#if 0
-      {
-        res = libusb_detach_kernel_driver(devh, 1);
-        if (res < 0) {
-          printf("libusb_detach_kernel_driver %d %s\n", res, libusb_strerror(res));
-        }
-      }
-#endif
       /* Print out a message containing all the information that libuvc
        * knows about the device */
       uvc_print_diag(devh, stderr);
@@ -115,9 +117,10 @@ int main(int argc, char **argv) {
       res = uvc_get_stream_ctrl_format_size(
           devh, &ctrl, /* result stored in ctrl */
           UVC_FRAME_FORMAT_MJPEG,
-//          640, 480, 5 /* width, height, fps */
+//          640, 480, 30 /* width, height, fps */
           3840, 2880, 5 /* width, height, fps */
-      );
+//          1920, 1080, 5 /* width, height, fps */
+);
       /* Print out the result */
       uvc_print_stream_ctrl(&ctrl, stderr);
       if (res < 0) {
@@ -132,7 +135,7 @@ int main(int argc, char **argv) {
         } else {
           puts("Streaming...");
 //          uvc_set_ae_mode(devh, 1); /* auto exposure */
-          sleep(10); /* stream for 10 seconds */
+          std::this_thread::sleep_for(std::chrono::seconds(10));
           /* End the stream. Blocks until last callback is serviced */
           uvc_stop_streaming(devh);
           puts("Done streaming.");
