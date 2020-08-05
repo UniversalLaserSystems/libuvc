@@ -37,7 +37,7 @@
  */
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
-#include <jpeg/jpeglib.h>
+#include <jpeglib.h>
 #include <setjmp.h>
 
 extern uvc_error_t uvc_ensure_frame_size(uvc_frame_t *frame, size_t need_bytes);
@@ -123,7 +123,7 @@ static void insert_huff_tables(j_decompress_ptr dinfo) {
 }
 
 #if _WIN32
-#include <jpeg/jerror.h> 
+#include <jerror.h> 
 /* Read JPEG image from a memory segment */
 static void init_source (j_decompress_ptr cinfo) {}
 static boolean fill_input_buffer (j_decompress_ptr cinfo)
@@ -141,7 +141,7 @@ static void skip_input_data (j_decompress_ptr cinfo, long num_bytes)
     }
 }
 static void term_source (j_decompress_ptr cinfo) {}
-static void jpeg_mem_src (j_decompress_ptr cinfo, void* buffer, long nbytes)
+static void jpeg_mem_src (j_decompress_ptr cinfo, const unsigned char* buffer, long nbytes)
 {
     struct jpeg_source_mgr* src;
 
@@ -174,7 +174,7 @@ static uvc_error_t uvc_mjpeg_convert(uvc_frame_t *in, uvc_frame_t *out) {
   }
 
   jpeg_create_decompress(&dinfo);
-  jpeg_mem_src(&dinfo, in->data, in->data_bytes);
+  jpeg_mem_src(&dinfo, (const unsigned char*)in->data, in->data_bytes);
   jpeg_read_header(&dinfo, TRUE);
 
   if (dinfo.dc_huff_tbl_ptrs[0] == NULL) {
