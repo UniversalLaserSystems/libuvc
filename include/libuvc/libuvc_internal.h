@@ -5,11 +5,9 @@
 #ifndef LIBUVC_INTERNAL_H
 #define LIBUVC_INTERNAL_H
 
-//#include <cassert>
 #include <cstdlib>
-//#include <cstdio>
-//#include <cstring>
-//#include <csignal>
+#include <cstdio>
+#include <cstring>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
