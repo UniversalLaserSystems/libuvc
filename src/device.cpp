@@ -889,7 +889,7 @@ uvc_error_t uvc_claim_if(uvc_device_handle_t *devh, int idx) {
     }
   } else {
     UVC_DEBUG("not claiming interface %d: unable to detach kernel driver (%s)",
-              idx, uvc_strerror(ret));
+              idx, uvc_strerror((uvc_error_t)ret));
   }
 
   UVC_EXIT(ret);
@@ -931,7 +931,7 @@ uvc_error_t uvc_release_if(uvc_device_handle_t *devh, int idx) {
       ret = UVC_SUCCESS;  /* NOT_FOUND and NOT_SUPPORTED are OK: nothing to do */
     } else {
       UVC_DEBUG("error reattaching kernel driver to interface %d: %s",
-                idx, uvc_strerror(ret));
+                idx, uvc_strerror((uvc_error_t)ret));
     }
   }
 
@@ -1819,7 +1819,7 @@ void LIBUSB_CALL _uvc_status_callback(struct libusb_transfer *transfer) {
   }
 
 #ifdef UVC_DEBUGGING
-  uvc_error_t ret =
+  int ret =
 #endif
       libusb_submit_transfer(transfer);
   UVC_DEBUG("libusb_submit_transfer() = %d", ret);
