@@ -63,19 +63,20 @@ void cb(uvc_frame_t *frame, void *ptr) {
   cv::Mat toBgr;
   cv::cvtColor(mat, toBgr, cv::COLOR_RGB2BGR);
 
-#if 1
+#if _WIN32
+  // I don't have OpenCV configured with GUI support on Windows so
+  // for now, just write images to file instead of displaying in window.
   static int i = 0;
   char temp[20];
   itoa(i++, temp, 10);
   std::string filename = "image" + std::string(temp) + ".jpg";
   cv::imwrite(filename, toBgr);
-#endif
-
+#else
   cv::namedWindow("Test", cv::WINDOW_NORMAL);
   cv::resizeWindow("Test", 1920, 1080);
   cv::imshow("Test", toBgr);
   cv::waitKey(10);
-
+#endif
   uvc_free_frame(decodedFrame);
 }
 
@@ -145,7 +146,7 @@ int main(int argc, char **argv) {
         } else {
           puts("Streaming...");
 //          uvc_set_ae_mode(devh, 1); /* auto exposure */
-          std::this_thread::sleep_for(std::chrono::seconds(10));
+          std::this_thread::sleep_for(std::chrono::seconds(2));
           /* End the stream. Blocks until last callback is serviced */
           uvc_stop_streaming(devh);
           puts("Done streaming.");

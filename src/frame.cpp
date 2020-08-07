@@ -62,7 +62,7 @@ uvc_error_t uvc_ensure_frame_size(uvc_frame_t *frame, size_t need_bytes) {
  * @return New frame, or NULL on error
  */
 uvc_frame_t *uvc_allocate_frame(size_t data_bytes) {
-  uvc_frame_t *frame = (uvc_frame_t *)malloc(sizeof(*frame));
+  uvc_frame_t *frame = new uvc_frame_t();
 
   if (!frame)
     return NULL;
@@ -76,7 +76,7 @@ uvc_frame_t *uvc_allocate_frame(size_t data_bytes) {
     frame->data = malloc(data_bytes);
 
     if (!frame->data) {
-      free(frame);
+      delete frame;
       return NULL;
     }
   }
@@ -98,7 +98,7 @@ void uvc_free_frame(uvc_frame_t *frame) {
       free(frame->metadata);
   }
 
-  free(frame);
+  delete frame;
 }
 
 static inline unsigned char sat(int i) {

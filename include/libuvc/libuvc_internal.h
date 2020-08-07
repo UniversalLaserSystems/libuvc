@@ -287,8 +287,8 @@ struct uvc_stream_handle {
     , meta_holdbuf(nullptr)
     , meta_got_bytes(0)
     , meta_hold_bytes(0) {
-//    memset(transfers, 0, sizeof(transfers) * sizeof(struct libusb_transfer));
-//    memset(transfer_bufs, 0, sizeof(transfer_bufs) * sizeof(uint8_t));
+    memset(transfers, 0, sizeof(transfers));
+    memset(transfer_bufs, 0, sizeof(transfer_bufs));
   }
 };
 
@@ -331,10 +331,14 @@ struct uvc_device_handle {
     , streams(nullptr)
     , is_isight(0)
     , claimed(0) {
-    memset(status_buf, 0, sizeof(status_buf) / sizeof(uint8_t));
+    memset(status_buf, 0, sizeof(status_buf));
   }
   ~uvc_device_handle() {
-    //TODO
+    if (info)
+      delete info;
+
+    if (status_xfer)
+      libusb_free_transfer(status_xfer);
   }
 };
 

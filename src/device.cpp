@@ -373,7 +373,7 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
 
   UVC_ENTER();
 
-  internal_info = (uvc_device_info_t *)calloc(1, sizeof(*internal_info));
+  internal_info = new uvc_device_info_t();
   if (!internal_info) {
     UVC_EXIT(UVC_ERROR_NO_MEM);
     return UVC_ERROR_NO_MEM;
@@ -382,7 +382,7 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
   if (libusb_get_config_descriptor(dev->usb_dev,
 				   0,
 				   &(internal_info->config)) != 0) {
-    free(internal_info);
+    delete internal_info;
     UVC_EXIT(UVC_ERROR_IO);
     return UVC_ERROR_IO;
   }
@@ -422,54 +422,54 @@ void uvc_free_device_info(uvc_device_info_t *info) {
 
   DL_FOREACH_SAFE(info->ctrl_if.input_term_descs, input_term, input_term_tmp) {
     DL_DELETE(info->ctrl_if.input_term_descs, input_term);
-    free(input_term);
+    delete input_term;
   }
 
   DL_FOREACH_SAFE(info->ctrl_if.processing_unit_descs, proc_unit, proc_unit_tmp) {
     DL_DELETE(info->ctrl_if.processing_unit_descs, proc_unit);
-    free(proc_unit);
+    delete proc_unit;
   }
 
   DL_FOREACH_SAFE(info->ctrl_if.extension_unit_descs, ext_unit, ext_unit_tmp) {
     DL_DELETE(info->ctrl_if.extension_unit_descs, ext_unit);
-    free(ext_unit);
+    delete ext_unit;
   }
 
   DL_FOREACH_SAFE(info->stream_ifs, stream_if, stream_if_tmp) {
     DL_FOREACH_SAFE(stream_if->format_descs, format, format_tmp) {
       DL_FOREACH_SAFE(format->frame_descs, frame, frame_tmp) {
         if (frame->intervals)
-          free(frame->intervals);
+          delete frame->intervals;
 
         DL_DELETE(format->frame_descs, frame);
-        free(frame);
+        delete frame;
       }
 
       if(format->still_frame_desc) {
         DL_FOREACH_SAFE(format->still_frame_desc, still_frame, still_frame_tmp) {
           DL_FOREACH_SAFE(still_frame->imageSizePatterns, still_res, still_res_tmp) {
-            free(still_res);
+            delete still_res;
           }
 
           if(still_frame->bCompression) {
-              free(still_frame->bCompression);
+              delete still_frame->bCompression;
           }
-          free(still_frame);
+          delete still_frame;
         }
       }
 
       DL_DELETE(stream_if->format_descs, format);
-      free(format);
+      delete format;
     }
 
     DL_DELETE(info->stream_ifs, stream_if);
-    free(stream_if);
+    delete stream_if;
   }
 
   if (info->config)
     libusb_free_config_descriptor(info->config);
 
-  free(info);
+  delete info;
 
   UVC_EXIT_VOID();
 }
@@ -502,7 +502,7 @@ uvc_error_t uvc_get_device_descriptor(
     return static_cast<uvc_error_t>(ret);
   }
 
-  desc_internal = (uvc_device_descriptor_t *)calloc(1, sizeof(*desc_internal));
+  desc_internal = new uvc_device_descriptor_t();
   desc_internal->idVendor = usb_desc.idVendor;
   desc_internal->idProduct = usb_desc.idProduct;
 
@@ -549,16 +549,7 @@ void uvc_free_device_descriptor(
     uvc_device_descriptor_t *desc) {
   UVC_ENTER();
 
-  if (desc->serialNumber)
-    free((void*) desc->serialNumber);
-
-  if (desc->manufacturer)
-    free((void*) desc->manufacturer);
-
-  if (desc->product)
-    free((void*) desc->product);
-
-  free(desc);
+  delete desc;
 
   UVC_EXIT_VOID();
 }
@@ -658,7 +649,7 @@ uvc_error_t uvc_get_device_list(
     libusb_free_config_descriptor(config);
 
     if (got_interface) {
-      uvc_device_t *uvc_dev = (uvc_device_t *)malloc(sizeof(*uvc_dev));
+      uvc_device_t *uvc_dev = new uvc_device_t();
       uvc_dev->ctx = ctx;
       uvc_dev->ref = 0;
       uvc_dev->usb_dev = usb_dev;
@@ -843,7 +834,7 @@ void uvc_ref_device(uvc_device_t *dev) {
 
 /**
  * @brief Decrement the reference count for a device
- * @ingropu device
+ * @ingroup device
  * @note If the count reaches zero, the device will be discarded
  *
  * @param dev Device to unreference
@@ -855,7 +846,7 @@ void uvc_unref_device(uvc_device_t *dev) {
   dev->ref--;
 
   if (dev->ref == 0)
-    free(dev);
+    delete dev;
 
   UVC_EXIT_VOID();
 }
@@ -1068,7 +1059,7 @@ uvc_error_t uvc_parse_vc_input_terminal(uvc_device_t *dev,
     return UVC_SUCCESS;
   }
 
-  term = (uvc_input_terminal_t *)calloc(1, sizeof(*term));
+  term = new uvc_input_terminal_t();
 
   term->bTerminalID = block[3];
   term->wTerminalType = (uvc_it_type)SW_TO_SHORT(&block[4]);
@@ -1097,7 +1088,7 @@ uvc_error_t uvc_parse_vc_processing_unit(uvc_device_t *dev,
 
   UVC_ENTER();
 
-  unit = (uvc_processing_unit_t *)calloc(1, sizeof(*unit));
+  unit = new uvc_processing_unit_t();
   unit->bUnitID = block[3];
   unit->bSourceID = block[4];
 
@@ -1121,7 +1112,7 @@ uvc_error_t uvc_parse_vc_selector_unit(uvc_device_t *dev,
 
   UVC_ENTER();
 
-  unit = (uvc_selector_unit_t *)calloc(1, sizeof(*unit));
+  unit = new uvc_selector_unit_t();
   unit->bUnitID = block[3];
 
   DL_APPEND(info->ctrl_if.selector_unit_descs, unit);
@@ -1137,7 +1128,7 @@ uvc_error_t uvc_parse_vc_selector_unit(uvc_device_t *dev,
 uvc_error_t uvc_parse_vc_extension_unit(uvc_device_t *dev,
 					uvc_device_info_t *info,
 					const unsigned char *block, size_t block_size) {
-  uvc_extension_unit_t *unit = (uvc_extension_unit_t *)calloc(1, sizeof(*unit));
+  uvc_extension_unit_t *unit = new uvc_extension_unit_t();
   const uint8_t *start_of_controls;
   int size_of_controls, num_in_pins;
   int i;
@@ -1227,7 +1218,7 @@ uvc_error_t uvc_scan_streaming(uvc_device_t *dev,
   buffer = if_desc->extra;
   buffer_left = if_desc->extra_length;
 
-  stream_if = (uvc_streaming_interface_t *)calloc(1, sizeof(*stream_if));
+  stream_if = new uvc_streaming_interface_t();
   stream_if->parent = info;
   stream_if->bInterfaceNumber = if_desc->bInterfaceNumber;
   DL_APPEND(info->stream_ifs, stream_if);
@@ -1275,7 +1266,7 @@ uvc_error_t uvc_parse_vs_format_uncompressed(uvc_streaming_interface_t *stream_i
 					     size_t block_size) {
   UVC_ENTER();
 
-  uvc_format_desc_t *format = (uvc_format_desc_t *)calloc(1, sizeof(*format));
+  uvc_format_desc_t *format = new uvc_format_desc_t();
 
   format->parent = stream_if;
   format->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
@@ -1305,7 +1296,7 @@ uvc_error_t uvc_parse_vs_frame_format(uvc_streaming_interface_t *stream_if,
 					     size_t block_size) {
   UVC_ENTER();
 
-  uvc_format_desc_t *format = (uvc_format_desc_t *)calloc(1, sizeof(*format));
+  uvc_format_desc_t *format = new uvc_format_desc_t();
 
   format->parent = stream_if;
   format->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
@@ -1335,7 +1326,7 @@ uvc_error_t uvc_parse_vs_format_mjpeg(uvc_streaming_interface_t *stream_if,
 					     size_t block_size) {
   UVC_ENTER();
 
-  uvc_format_desc_t *format = (uvc_format_desc_t *)calloc(1, sizeof(*format));
+  uvc_format_desc_t *format = new uvc_format_desc_t();
 
   format->parent = stream_if;
   format->bDescriptorSubtype = (uvc_vs_desc_subtype)block[2];
@@ -1371,7 +1362,7 @@ uvc_error_t uvc_parse_vs_frame_frame(uvc_streaming_interface_t *stream_if,
   UVC_ENTER();
 
   format = stream_if->format_descs->prev;
-  frame = (uvc_frame_desc_t *)calloc(1, sizeof(*frame));
+  frame = new uvc_frame_desc_t();
 
   frame->parent = format;
 
@@ -1423,7 +1414,7 @@ uvc_error_t uvc_parse_vs_frame_uncompressed(uvc_streaming_interface_t *stream_if
   UVC_ENTER();
 
   format = stream_if->format_descs->prev;
-  frame = (uvc_frame_desc_t *)calloc(1, sizeof(*frame));
+  frame = new uvc_frame_desc_t();
 
   frame->parent = format;
 
@@ -1476,7 +1467,7 @@ uvc_error_t uvc_parse_vs_still_image_frame(uvc_streaming_interface_t *stream_if,
   UVC_ENTER();
 
   format = stream_if->format_descs->prev;
-  frame = (uvc_still_frame_desc*)calloc(1, sizeof(*frame));
+  frame = new uvc_still_frame_desc();
 
   frame->parent = format;
 
@@ -1489,7 +1480,7 @@ uvc_error_t uvc_parse_vs_still_image_frame(uvc_streaming_interface_t *stream_if,
   p = &block[5];
 
   for (i = 1; i <= numImageSizePatterns; ++i) {
-    uvc_still_frame_res_t* res = (uvc_still_frame_res_t *)calloc(1, sizeof(uvc_still_frame_res_t));
+    uvc_still_frame_res_t* res = new uvc_still_frame_res_t();
     res->bResolutionIndex = i;
     res->wWidth = SW_TO_SHORT(p);
     p += 2;
@@ -1594,13 +1585,7 @@ uvc_error_t uvc_parse_vs(
 void uvc_free_devh(uvc_device_handle_t *devh) {
   UVC_ENTER();
 
-  if (devh->info)
-    uvc_free_device_info(devh->info);
-
-  if (devh->status_xfer)
-    libusb_free_transfer(devh->status_xfer);
-
-  free(devh);
+  delete devh;
 
   UVC_EXIT_VOID();
 }
@@ -1629,7 +1614,9 @@ void uvc_close(uvc_device_handle_t *devh) {
   if (ctx->own_usb_ctx && ctx->open_devices == devh && devh->next == NULL) {
     ctx->kill_handler_thread = 1;
     libusb_close(devh->usb_devh);
+    UVC_DEBUG("handler_thread joining");
     ctx->handler_thread.join();
+    UVC_DEBUG("handler_thread joined");
   } else {
     libusb_close(devh->usb_devh);
   }

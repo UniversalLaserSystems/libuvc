@@ -1448,7 +1448,9 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
   if (strmh->user_cb) {
     /* wait for the thread to stop (triggered by
      * LIBUSB_TRANSFER_CANCELLED transfer) */
+    UVC_DEBUG("callback_thread joining");
     strmh->callback_thread.join();
+    UVC_DEBUG("callback_thread joined");
   }
 
   return UVC_SUCCESS;

@@ -281,6 +281,8 @@ typedef struct uvc_format_desc {
     , bVariableSize(0)
     , frame_descs(nullptr)
     , still_frame_desc(nullptr) {
+    memset(guidFormat, 0, sizeof(guidFormat) / sizeof(uint8_t));
+    memset(fourccFormat, 0, sizeof(fourccFormat) / sizeof(uint8_t));
   }
 } uvc_format_desc_t;
 
@@ -551,6 +553,17 @@ typedef struct uvc_device_descriptor {
     , serialNumber(nullptr)
     , manufacturer(nullptr)
     , product(nullptr) {
+  }
+
+  ~uvc_device_descriptor() {
+    if (serialNumber)
+      free((void*)serialNumber);
+
+    if (manufacturer)
+      free((void*)manufacturer);
+
+    if (product)
+      free((void*)product);
   }
 } uvc_device_descriptor_t;
 
