@@ -131,6 +131,14 @@ typedef struct uvc_still_frame_res {
   uint16_t wWidth;
   /** Image height */
   uint16_t wHeight;
+
+  uvc_still_frame_res()
+    : prev(nullptr)
+    , next(nullptr)
+    , bResolutionIndex(0)
+    , wWidth(0)
+    , wHeight(0) {
+  }
 } uvc_still_frame_res_t;
 
 typedef struct uvc_still_frame_desc {
@@ -144,6 +152,17 @@ typedef struct uvc_still_frame_desc {
   uint8_t bNumCompressionPattern;
   /* indication of compression level, the higher, the more compression is applied to image */
   uint8_t* bCompression;
+
+  uvc_still_frame_desc()
+    : parent(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , bDescriptorSubtype(UVC_VS_UNDEFINED)
+    , bEndPointAddress(0)
+    , imageSizePatterns(nullptr)
+    , bNumCompressionPattern(0)
+    , bCompression(nullptr) {
+  }
 } uvc_still_frame_desc_t;
 
 /** Frame descriptor
@@ -184,6 +203,27 @@ typedef struct uvc_frame_desc {
   uint32_t dwBytesPerLine;
   /** Available frame rates, zero-terminated (in 100ns units) */
   uint32_t *intervals;
+
+  uvc_frame_desc()
+    : parent(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , bDescriptorSubtype(UVC_VS_UNDEFINED)
+    , bFrameIndex(0)
+    , bmCapabilities(0)
+    , wWidth(0)
+    , wHeight(0)
+    , dwMinBitRate(0)
+    , dwMaxBitRate(0)
+    , dwMaxVideoFrameBufferSize(0)
+    , dwDefaultFrameInterval(0)
+    , dwMinFrameInterval(0)
+    , dwMaxFrameInterval(0)
+    , dwFrameIntervalStep(0)
+    , bFrameIntervalType(0)
+    , dwBytesPerLine(0)
+    , intervals(nullptr) {
+  }
 } uvc_frame_desc_t;
 
 /** Format descriptor
@@ -221,6 +261,27 @@ typedef struct uvc_format_desc {
   /** Available frame specifications for this format */
   struct uvc_frame_desc *frame_descs;
   struct uvc_still_frame_desc *still_frame_desc;
+
+  uvc_format_desc()
+    : parent(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , bDescriptorSubtype(UVC_VS_UNDEFINED)
+    , bFormatIndex(0)
+    , bNumFrameDescriptors(0)
+    //, guidFormat
+    //, fourccFormat
+    , bBitsPerPixel(0)
+    , bmFlags(0)
+    , bDefaultFrameIndex(0)
+    , bAspectRatioX(0)
+    , bAspectRatioY(0)
+    , bmInterlaceFlags(0)
+    , bCopyProtect(0)
+    , bVariableSize(0)
+    , frame_descs(nullptr)
+    , still_frame_desc(nullptr) {
+  }
 } uvc_format_desc_t;
 
 /** UVC request code (A.8) */
@@ -362,11 +423,26 @@ typedef struct uvc_input_terminal {
   uint16_t wOcularFocalLength;
   /** Camera controls (meaning of bits given in {uvc_ct_ctrl_selector}) */
   uint64_t bmControls;
+
+  uvc_input_terminal()
+    : prev(nullptr)
+    , next(nullptr)
+    , bTerminalID(0)
+    , wTerminalType(UVC_ITT_VENDOR_SPECIFIC)
+    , wObjectiveFocalLengthMin(0)
+    , wObjectiveFocalLengthMax(0)
+    , wOcularFocalLength(0) {
+  }
 } uvc_input_terminal_t;
 
 typedef struct uvc_output_terminal {
   struct uvc_output_terminal *prev, *next;
   /** @todo */
+
+  uvc_output_terminal()
+    : prev(nullptr)
+    , next(nullptr) {
+  }
 } uvc_output_terminal_t;
 
 /** Represents post-capture processing functions */
@@ -378,6 +454,14 @@ typedef struct uvc_processing_unit {
   uint8_t bSourceID;
   /** Processing controls (meaning of bits given in {uvc_pu_ctrl_selector}) */
   uint64_t bmControls;
+
+  uvc_processing_unit()
+    : prev(nullptr)
+    , next(nullptr)
+    , bUnitID(0)
+    , bSourceID(0)
+    , bmControls(0) {
+  }
 } uvc_processing_unit_t;
 
 /** Represents selector unit to connect other units */
@@ -385,6 +469,12 @@ typedef struct uvc_selector_unit {
   struct uvc_selector_unit *prev, *next;
   /** Index of the selector unit within the device */
   uint8_t bUnitID;
+
+  uvc_selector_unit()
+    : prev(nullptr)
+    , next(nullptr)
+    , bUnitID(0) {
+  }
 } uvc_selector_unit_t;
 
 /** Custom processing or camera-control functions */
@@ -396,6 +486,14 @@ typedef struct uvc_extension_unit {
   uint8_t guidExtensionCode[16];
   /** Bitmap of available controls (manufacturer-dependent) */
   uint64_t bmControls;
+
+  uvc_extension_unit()
+    : prev(nullptr)
+    , next(nullptr)
+    , bUnitID(0)
+    //, guidExtensionCode
+    , bmControls(0) {
+  }
 } uvc_extension_unit_t;
 
 enum uvc_status_class {
@@ -445,6 +543,15 @@ typedef struct uvc_device_descriptor {
   const char *manufacturer;
   /** Device-reporter product name (or null) */
   const char *product;
+
+  uvc_device_descriptor()
+    : idVendor(0)
+    , idProduct(0)
+    , bcdUVC(0)
+    , serialNumber(nullptr)
+    , manufacturer(nullptr)
+    , product(nullptr) {
+  }
 } uvc_device_descriptor_t;
 
 /** An image frame received from the UVC device
@@ -527,6 +634,26 @@ typedef struct uvc_stream_ctrl {
   uint8_t bMinVersion;
   uint8_t bMaxVersion;
   uint8_t bInterfaceNumber;
+
+  uvc_stream_ctrl()
+    : bmHint(0)
+    , bFormatIndex(0)
+    , bFrameIndex(0)
+    , dwFrameInterval(0)
+    , wKeyFrameRate(0)
+    , wPFrameRate(0)
+    , wCompQuality(0)
+    , wCompWindowSize(0)
+    , wDelay(0)
+    , dwMaxVideoFrameSize(0)
+    , dwMaxPayloadTransferSize(0)
+    , dwClockFrequency(0)
+    , bmFramingInfo(0)
+    , bPreferredVersion(0)
+    , bMinVersion(0)
+    , bMaxVersion(0)
+    , bInterfaceNumber(0) {
+  }
 } uvc_stream_ctrl_t;
 
 typedef struct uvc_still_ctrl {
@@ -541,6 +668,15 @@ typedef struct uvc_still_ctrl {
   /* Maximum number of byte per payload*/
   uint32_t dwMaxPayloadTransferSize;
   uint8_t bInterfaceNumber;
+
+  uvc_still_ctrl()
+    : bFormatIndex(0)
+    , bFrameIndex(0)
+    , bCompressionIndex(0)
+    , dwMaxVideoFrameSize(0)
+    , dwMaxPayloadTransferSize(0)
+    , bInterfaceNumber(0) {
+  }
 } uvc_still_ctrl_t;
 
 uvc_error_t uvc_init(uvc_context_t **ctx, struct libusb_context *usb_ctx);
