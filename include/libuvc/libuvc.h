@@ -4,6 +4,8 @@
 #include <chrono>
 #include <cstdio> // FILE
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <libuvc/libuvc_config.h>
 
 #ifdef __cplusplus
@@ -272,7 +274,7 @@ typedef struct uvc_format_desc {
     //, guidFormat
     //, fourccFormat
     , bBitsPerPixel(0)
-    , bmFlags(0)
+    //, bmFlags(0)
     , bDefaultFrameIndex(0)
     , bAspectRatioX(0)
     , bAspectRatioY(0)
