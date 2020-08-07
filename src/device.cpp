@@ -290,7 +290,7 @@ uvc_error_t uvc_open(
 
   uvc_ref_device(dev);
 
-  internal_devh = (uvc_device_handle_t *)calloc(1, sizeof(*internal_devh));
+  internal_devh = new uvc_device_handle_t();
   internal_devh->dev = dev;
   internal_devh->usb_devh = usb_devh;
 

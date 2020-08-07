@@ -103,13 +103,13 @@ void *_uvc_handle_events(void *arg) {
  */
 uvc_error_t uvc_init(uvc_context_t **pctx, struct libusb_context *usb_ctx) {
   int ret = UVC_SUCCESS;
-  uvc_context_t *ctx = (uvc_context_t *)calloc(1, sizeof(*ctx));
+  uvc_context_t *ctx = new uvc_context_t();
 
   if (usb_ctx == NULL) {
     ret = libusb_init(&ctx->usb_ctx);
     ctx->own_usb_ctx = 1;
     if (ret != UVC_SUCCESS) {
-      free(ctx);
+      delete ctx;
       ctx = NULL;
     }
   } else {
@@ -147,7 +147,7 @@ void uvc_exit(uvc_context_t *ctx) {
   if (ctx->own_usb_ctx)
     libusb_exit(ctx->usb_ctx);
 
-  free(ctx);
+  delete ctx;
 }
 
 /**

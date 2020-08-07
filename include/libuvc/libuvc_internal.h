@@ -193,6 +193,12 @@ struct uvc_device {
   struct uvc_context *ctx;
   int ref;
   libusb_device *usb_dev;
+
+  uvc_device()
+    : ctx(nullptr)
+    , ref(0)
+    , usb_dev(0) {
+  }
 };
 
 typedef struct uvc_device_info {
@@ -250,6 +256,40 @@ struct uvc_stream_handle {
   /* raw metadata buffer if available */
   uint8_t *meta_outbuf, *meta_holdbuf;
   size_t meta_got_bytes, meta_hold_bytes;
+
+  uvc_stream_handle()
+    : devh(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , stream_if(nullptr)
+    , running(0)
+    //, cur_ctrl default constructed
+    , fid(0)
+    , seq(0)
+    , hold_seq(0)
+    , pts(0)
+    , hold_pts(0)
+    , last_scr(0)
+    , hold_last_scr(0)
+    , got_bytes(0)
+    , hold_bytes(0)
+    , outbuf(nullptr)
+    , holdbuf(nullptr)
+    , last_polled_seq(0)
+    , user_cb(nullptr)
+    , user_ptr(nullptr)
+    //, transfers memset below
+    //, transfer_bufs memset below
+    //, frame default constructed
+    , frame_format(UVC_FRAME_FORMAT_UNKNOWN)
+    //, capture_time_finished default constructed
+    , meta_outbuf(nullptr)
+    , meta_holdbuf(nullptr)
+    , meta_got_bytes(0)
+    , meta_hold_bytes(0) {
+//    memset(transfers, 0, sizeof(transfers) * sizeof(struct libusb_transfer));
+//    memset(transfer_bufs, 0, sizeof(transfer_bufs) * sizeof(uint8_t));
+  }
 };
 
 /** Handle on an open UVC device
@@ -275,6 +315,27 @@ struct uvc_device_handle {
   /** Whether the camera is an iSight that sends one header per frame */
   uint8_t is_isight;
   uint32_t claimed;
+
+  uvc_device_handle()
+    : dev(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , usb_devh(nullptr)
+    , info(nullptr)
+    , status_xfer(nullptr)
+    //, status_buf
+    , status_cb(nullptr)
+    , status_user_ptr(nullptr)
+    , button_cb(nullptr)
+    , button_user_ptr(nullptr)
+    , streams(nullptr)
+    , is_isight(0)
+    , claimed(0) {
+    memset(status_buf, 0, sizeof(status_buf) / sizeof(uint8_t));
+  }
+  ~uvc_device_handle() {
+    //TODO
+  }
 };
 
 /** Context within which we communicate with devices */
@@ -287,6 +348,14 @@ struct uvc_context {
   uvc_device_handle_t *open_devices;
   std::thread handler_thread;
   int kill_handler_thread;
+
+  uvc_context()
+    : usb_ctx(nullptr)
+    , own_usb_ctx(0)
+    , open_devices(nullptr)
+    //, handler_thread default constructed
+    , kill_handler_thread(0) {
+  }
 };
 
 uvc_error_t uvc_query_stream_ctrl(

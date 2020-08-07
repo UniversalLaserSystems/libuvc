@@ -483,6 +483,22 @@ typedef struct uvc_frame {
   void *metadata;
   /** Size of metadata buffer */
   size_t metadata_bytes;
+
+  uvc_frame()
+    : data(nullptr)
+    , data_bytes(0)
+    , width(0)
+    , height(0)
+    , frame_format(UVC_FRAME_FORMAT_UNKNOWN)
+    , step(0)
+    , sequence(0)
+    //, capture_time default constructed
+    //, capture_time_finished default constructed
+    , source(nullptr)
+    , library_owns_data(0)
+    , metadata(nullptr)
+    , metadata_bytes(0) {
+  }
 } uvc_frame_t;
 
 /** A callback function to handle incoming assembled UVC frames
