@@ -34,6 +34,8 @@
 #include <chrono>
 #include <thread>
 
+#include <cstdlib>
+
 /* This callback function runs once per frame. Use it to perform any
  * quick processing you need, or have it put the frame into your application's
  * input queue. If this function takes too long, you'll start losing frames. */
@@ -60,6 +62,14 @@ void cb(uvc_frame_t *frame, void *ptr) {
                cv::Mat::AUTO_STEP);
   cv::Mat toBgr;
   cv::cvtColor(mat, toBgr, cv::COLOR_RGB2BGR);
+
+#if 1
+  static int i = 0;
+  char temp[20];
+  itoa(i++, temp, 10);
+  std::string filename = "image" + std::string(temp) + ".jpg";
+  cv::imwrite(filename, toBgr);
+#endif
 
   cv::namedWindow("Test", cv::WINDOW_NORMAL);
   cv::resizeWindow("Test", 1920, 1080);
@@ -117,8 +127,8 @@ int main(int argc, char **argv) {
       res = uvc_get_stream_ctrl_format_size(
           devh, &ctrl, /* result stored in ctrl */
           UVC_FRAME_FORMAT_MJPEG,
-//          640, 480, 30 /* width, height, fps */
-          3840, 2880, 5 /* width, height, fps */
+          640, 480, 30 /* width, height, fps */
+//          3840, 2880, 5 /* width, height, fps */
 //          1920, 1080, 5 /* width, height, fps */
 );
       /* Print out the result */

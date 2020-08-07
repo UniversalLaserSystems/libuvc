@@ -976,7 +976,7 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
     goto fail;
   }
 
-  strmh = (uvc_stream_handle_t *)calloc(1, sizeof(*strmh));
+  strmh = new uvc_stream_handle_t();
   if (!strmh) {
     ret = UVC_ERROR_NO_MEM;
     goto fail;
@@ -1010,8 +1010,8 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
   return UVC_SUCCESS;
 
 fail:
-  if(strmh)
-    free(strmh);
+  if (strmh)
+    delete strmh;
   UVC_EXIT(ret);
   return ret;
 }
@@ -1477,5 +1477,5 @@ void uvc_stream_close(uvc_stream_handle_t *strmh) {
   free(strmh->meta_holdbuf);
 
   DL_DELETE(strmh->devh->streams, strmh);
-  free(strmh);
+  delete strmh;
 }
