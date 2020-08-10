@@ -65,7 +65,7 @@ endif()
 cmake_print_properties(TARGETS LibUSB::LibUSB
                        PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION)
 cmake_print_properties(TARGETS JPEG::JPEG
-                       PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION)
+                       PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION IMPORTED_LOCATION_RELEASE IMPORTED_LOCATION_DEBUG)
 # -----------------------------------------------------------------------------]
 
 if(${CMAKE_BUILD_TARGET} MATCHES "Shared")
