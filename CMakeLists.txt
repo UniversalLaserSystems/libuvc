@@ -148,6 +148,9 @@ endforeach()
 
 if(BUILD_EXAMPLE)
   add_executable(example src/example.cpp)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set_target_properties(example PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMT")
+  endif()
   find_package(Threads)
   find_package(OpenCV REQUIRED
       core
@@ -180,6 +183,9 @@ if(BUILD_TEST)
     src/test.cpp
     $<$<BOOL:${JPEG_FOUND}>:src/frame-mjpeg.cpp>
   )
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set_target_properties(uvc_test PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMT")
+  endif()
   target_link_libraries(uvc_test
     PRIVATE
       LibUVC::UVC

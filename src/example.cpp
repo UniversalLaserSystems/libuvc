@@ -32,20 +32,158 @@
 #include <opencv2/core.hpp>
 #include <stdio.h>
 #include <chrono>
+#include <sstream>
 #include <thread>
 
 #include <cstdlib>
 
+
+using namespace std;
+
+
+class Camera
+{
+public:
+  Camera(
+    int vid,
+    int pid,
+    int width,
+    int height,
+    int fps,
+    uvc_context_t *ctx);
+
+  ~Camera();
+
+  void OpenDevice();
+  void CloseDevice();
+  void StartStreaming();
+private:
+  static void LibuvcCallback(uvc_frame_t *frame, void *ptr);
+
+  int vid_;
+  int pid_;
+  int width_;
+  int height_;
+  int fps_;
+  uvc_context_t *ctx_;
+  uvc_device_t *dev_;
+  uvc_device_handle_t *devh_;
+  uvc_stream_ctrl_t ctrl_;
+  int frameCounter_;
+};
+
+Camera::Camera(
+  int vid,
+  int pid,
+  int width,
+  int height,
+  int fps,
+  uvc_context *ctx)
+  : vid_(vid)
+  , pid_(pid)
+  , width_(width)
+  , height_(height)
+  , fps_(fps)
+  , ctx_(ctx)
+  , dev_(nullptr)
+  , devh_(nullptr)
+  , frameCounter_(0)
+{
+}
+
+Camera::~Camera()
+{
+  CloseDevice();
+}
+
+void Camera::OpenDevice()
+{
+  printf("Opening camera device vid:0x%04x pid:0x%04x\n", vid_, pid_);
+
+  if (dev_ != nullptr)
+  {
+    throw std::runtime_error("camera device already open");
+  }
+  if (devh_ != nullptr)
+  {
+    throw std::runtime_error("device handle already open");
+  }
+    
+  printf("uvc_find_device\n");
+  auto res = uvc_find_device(
+    ctx_, &dev_,
+    vid_, pid_, NULL); /* filter devices: vendor_id, product_id, "serial_num" */
+  if (res < 0)
+  {
+    throw std::runtime_error(uvc_strerror(res));
+  }
+    
+  printf("uvc_open\n");
+  res = uvc_open(dev_, &devh_);
+  if (res < 0)
+  {
+    throw std::runtime_error(uvc_strerror(res));
+  }
+
+  uvc_print_diag(devh_, stderr);
+
+  printf("uvc_get_stream_ctrl_format_size %dx%d @ %d FPS\n", width_, height_, fps_);
+  res = uvc_get_stream_ctrl_format_size(
+    devh_, &ctrl_, /* result stored in ctrl */
+    UVC_FRAME_FORMAT_MJPEG,
+    width_, height_, fps_);
+  if (res < 0)
+  {
+    printf("Resolution %dx%d @ %d FPS is not a valid configuration\n", width_, height_, fps_);
+    throw std::runtime_error("invalid resolution and frame rate");
+  }
+
+  uvc_print_stream_ctrl(&ctrl_, stderr);
+}
+
+void Camera::CloseDevice()
+{
+  if (devh_ != nullptr)
+  {
+    printf("uvc_stop_streaming\n");
+    uvc_stop_streaming(devh_);
+    printf("uvc_close");
+    uvc_close(devh_);
+    devh_ = nullptr;
+  }
+  if (dev_ != nullptr)
+  {
+    printf("uvc_unref_device\n");
+    uvc_unref_device(dev_);
+    dev_ = nullptr;
+  }
+}
+
+void Camera::StartStreaming()
+{
+  printf("uvc_start_streaming\n");
+  fflush(stdout);
+  auto res = uvc_start_streaming(devh_, &ctrl_, &Camera::LibuvcCallback, (void*)this, 0);
+  if (res < 0)
+  {
+    throw std::runtime_error(uvc_strerror(res));
+  }
+}
+
+
 /* This callback function runs once per frame. Use it to perform any
  * quick processing you need, or have it put the frame into your application's
  * input queue. If this function takes too long, you'll start losing frames. */
-void cb(uvc_frame_t *frame, void *ptr) {
+void Camera::LibuvcCallback(uvc_frame_t *frame, void *ptr) {
   uvc_frame_t *decodedFrame;
   uvc_error_t ret;
+  auto camera = reinterpret_cast<Camera*>(ptr);
+  auto frameIndex = camera->frameCounter_++;
+
   printf("callback\n");
   decodedFrame = uvc_allocate_frame(frame->width * frame->height * 3);
   if (!decodedFrame) {
-    printf("unable to allocate decodedFrame frame!");
+    printf("ERROR: unable to allocate decodedFrame frame!\n");
     return;
   }
 
@@ -66,10 +204,13 @@ void cb(uvc_frame_t *frame, void *ptr) {
 #if _WIN32
   // I don't have OpenCV configured with GUI support on Windows so
   // for now, just write images to file instead of displaying in window.
-  static int i = 0;
-  char temp[20];
-  itoa(i++, temp, 10);
-  std::string filename = "image" + std::string(temp) + ".jpg";
+  ostringstream ss;
+  ss << "image_"
+     << hex << camera->vid_ << "_"
+     << hex << camera->pid_ << "_"
+     << frameIndex << ".jpg";
+  
+  std::string filename = ss.str();
   cv::imwrite(filename, toBgr);
 #else
   cv::namedWindow("Test", cv::WINDOW_NORMAL);
@@ -80,18 +221,14 @@ void cb(uvc_frame_t *frame, void *ptr) {
   uvc_free_frame(decodedFrame);
 }
 
-struct libuvc_callback_data_t
-{
-};
-
-libuvc_callback_data_t libuvc_callback_data;
+// -----------------------------------------------------------------------------
+// main
+// -----------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
   uvc_context_t *ctx;
-  uvc_device_t *dev;
-  uvc_device_handle_t *devh;
-  uvc_stream_ctrl_t ctrl;
   uvc_error_t res;
+  
   /* Initialize a UVC service context. Libuvc will set up its own libusb
    * context. Replace NULL with a libusb_context pointer to run libuvc
    * from an existing libusb context. */
@@ -100,68 +237,26 @@ int main(int argc, char **argv) {
     uvc_perror(res, "uvc_init");
     return res;
   }
-  puts("UVC initialized");
-  /* Locates the first attached UVC device, stores in dev */
-#if 1
-  res = uvc_find_device(
-    ctx, &dev,
-    0, 0, NULL); /* filter devices: vendor_id, product_id, "serial_num" */
-#else
-  res = uvc_find_device(
-    ctx, &dev,
-    0x05a3, 0x2214, NULL); /* filter devices: vendor_id, product_id, "serial_num" */
-#endif
-  if (res < 0) {
-    uvc_perror(res, "uvc_find_device"); /* no devices found */
-  } else {
-    puts("Device found");
-    /* Try to open the device: requires exclusive access */
-    res = uvc_open(dev, &devh);
-    if (res < 0) {
-      uvc_perror(res, "uvc_open"); /* unable to open device */
-    } else {
-      puts("Device opened");
-      /* Print out a message containing all the information that libuvc
-       * knows about the device */
-      uvc_print_diag(devh, stderr);
-      /* Try to negotiate a 640x480 30 fps YUYV stream profile */
-      res = uvc_get_stream_ctrl_format_size(
-          devh, &ctrl, /* result stored in ctrl */
-          UVC_FRAME_FORMAT_MJPEG,
-          640, 480, 30 /* width, height, fps */
-//          3840, 2880, 5 /* width, height, fps */
-//          1920, 1080, 5 /* width, height, fps */
-);
-      /* Print out the result */
-      uvc_print_stream_ctrl(&ctrl, stderr);
-      if (res < 0) {
-        uvc_perror(res, "get_mode"); /* device doesn't provide a matching stream */
-      } else {
-        /* Start the video stream. The library will call user function cb:
-         *   cb(frame, (void*) libuvc_callback_data)
-         */
-        res = uvc_start_streaming(devh, &ctrl, cb, (void*)&libuvc_callback_data, 0);
-        if (res < 0) {
-          uvc_perror(res, "start_streaming"); /* unable to start stream */
-        } else {
-          puts("Streaming...");
-//          uvc_set_ae_mode(devh, 1); /* auto exposure */
-          std::this_thread::sleep_for(std::chrono::seconds(2));
-          /* End the stream. Blocks until last callback is serviced */
-          uvc_stop_streaming(devh);
-          puts("Done streaming.");
-        }
-      }
-      /* Release our handle on the device */
-      uvc_close(devh);
-      puts("Device closed");
-    }
-    /* Release the device descriptor */
-    uvc_unref_device(dev);
-  }
+  printf("UVC initialized\n");
+
+  Camera camera1(0x05A3, 0x9520,  640,  480, 30, ctx);
+  Camera camera2(0x05A3, 0x2214, 3840, 2880,  5, ctx);
+
+  camera1.OpenDevice();
+  camera1.StartStreaming();
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  camera1.CloseDevice();
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+
+  camera2.OpenDevice();
+  camera2.StartStreaming();
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  camera2.CloseDevice();
+  
   /* Close the UVC context. This closes and cleans up any existing device handles,
    * and it closes the libusb context if one was not provided. */
   uvc_exit(ctx);
-  puts("UVC exited");
+  printf("UVC exited\n");
   return 0;
 }
