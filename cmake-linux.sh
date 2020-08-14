@@ -62,6 +62,7 @@ cmake \
     -Wno-dev \
     -DCMAKE_BUILD_TYPE=${BUILD_CONFIG} \
     -DOpenCV_ROOT="/home/vagrant/uls/lsm/lsm-10/third-party/install" \
+    -DENABLE_UVC_DEBUGGING=ON \
     ..
 
 exit 0

@@ -1617,6 +1617,7 @@ void uvc_close(uvc_device_handle_t *devh) {
     UVC_DEBUG("handler_thread joining");
     ctx->handler_thread.join();
     UVC_DEBUG("handler_thread joined");
+    ctx->kill_handler_thread = 0;
   } else {
     libusb_close(devh->usb_devh);
   }

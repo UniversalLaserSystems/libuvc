@@ -224,6 +224,15 @@ typedef struct uvc_device_info {
 #define LIBUVC_XFER_BUF_SIZE	( 16 * 1024 * 1024 )
 #define LIBUVC_XFER_META_BUF_SIZE ( 4 * 1024 )
 
+struct libusb_transfer_deleter {
+  void operator()(struct libusb_transfer* t) {
+    free(t->buffer);
+    libusb_free_transfer(t);
+  }
+};
+
+typedef std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter> unique_ptr_libusb_transfer;
+
 struct uvc_stream_handle {
   struct uvc_device_handle *devh;
   struct uvc_stream_handle *prev, *next;
@@ -256,9 +265,13 @@ struct uvc_stream_handle {
   uint32_t last_polled_seq;
   uvc_frame_callback_t *user_cb;
   void *user_ptr;
-  /* The libusb_transfer's and their data buffers. */
-  struct libusb_transfer *transfers[LIBUVC_NUM_TRANSFER_BUFS];
-  uint8_t *transfer_bufs[LIBUVC_NUM_TRANSFER_BUFS];
+  /*
+   * Each transfer is a unique_ptr<libusb_transfer> whose underlying raw pointer
+   * is managed by libusb_alloc_transfer/libusb_free_transfer. The
+   * libusb_transfer also has a buffer member that we are responsible for
+   * freeing which is done by the custom deleter, libusb_transfer_deleter.
+   */
+  std::vector<std::unique_ptr<struct libusb_transfer, libusb_transfer_deleter>> transfers;
   struct uvc_frame frame;
   enum uvc_frame_format frame_format;
   std::chrono::steady_clock::time_point capture_time_finished;
@@ -283,8 +296,7 @@ struct uvc_stream_handle {
     , last_polled_seq(0)
     , user_cb(nullptr)
     , user_ptr(nullptr)
-    //, transfers memset below
-    //, transfer_bufs memset below
+    , transfers(LIBUVC_NUM_TRANSFER_BUFS)
     //, frame default constructed
     , frame_format(UVC_FRAME_FORMAT_UNKNOWN)
     //, capture_time_finished default constructed
@@ -294,9 +306,6 @@ struct uvc_stream_handle {
     holdbuf.reserve(LIBUVC_XFER_BUF_SIZE);
     meta_outbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
     meta_holdbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
-
-    memset(transfers, 0, sizeof(transfers));
-    memset(transfer_bufs, 0, sizeof(transfer_bufs));
   }
 
   ~uvc_stream_handle() {

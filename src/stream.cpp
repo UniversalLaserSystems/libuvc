@@ -39,6 +39,8 @@
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
 #include "errno.h"
+#include <algorithm>
+#include <memory>
 
 uvc_frame_desc_t *uvc_find_frame_desc_stream(uvc_stream_handle_t *strmh,
     uint16_t format_id, uint16_t frame_id);
@@ -798,17 +800,22 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
     {
       std::lock_guard<std::mutex> lock(strmh->callback_mutex);
 
-      /* Mark transfer as deleted. */
-      for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-        if(strmh->transfers[i] == transfer) {
-          UVC_DEBUG("Freeing transfer %d (%p)", i, transfer);
-          free(transfer->buffer);
-          libusb_free_transfer(transfer);
-          strmh->transfers[i] = NULL;
-          break;
-        }
+      auto it = std::find_if(
+        std::begin(strmh->transfers),
+        std::end(strmh->transfers),
+        [&](const std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>& t)
+        {
+          return t.get() == transfer;
+        });
+      if (it != std::end(strmh->transfers))
+      {
+        // Delete managed object
+        // TODO: Do I need to check *it (operator bool) first?
+        UVC_DEBUG("Freeing transfer (%p)", transfer);
+        it->reset();
       }
-      if(i == LIBUVC_NUM_TRANSFER_BUFS ) {
+      else
+      {
         UVC_DEBUG("transfer %p not found; not freeing!", transfer);
       }
 
@@ -831,19 +838,23 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
       {
         {
           std::lock_guard<std::mutex> lock(strmh->callback_mutex);
-          int i;
 
           /* Mark transfer as deleted. */
-          for (i = 0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-            if (strmh->transfers[i] == transfer) {
-              UVC_DEBUG("Freeing failed transfer %d (%p)", i, transfer);
-              free(transfer->buffer);
-              libusb_free_transfer(transfer);
-              strmh->transfers[i] = NULL;
-              break;
-            }
+          auto it = std::find_if(
+            std::begin(strmh->transfers),
+            std::end(strmh->transfers),
+            [&](const std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>& t)
+            {
+              return t.get() == transfer;
+            });
+          if (it != std::end(strmh->transfers))
+          {
+            // TODO: Do I need to check *it (operator bool) first?
+            UVC_DEBUG("Freeing failed transfer (%p)", transfer);
+            it->reset();
           }
-          if (i == LIBUVC_NUM_TRANSFER_BUFS) {
+          else
+          {
             UVC_DEBUG("failed transfer %p not found; not freeing!", transfer);
           }
         }
@@ -852,20 +863,24 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
     } else {
       {
         std::lock_guard<std::mutex> lock(strmh->callback_mutex);        
-        int i;
 
         /* Mark transfer as deleted. */
-        for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-          if(strmh->transfers[i] == transfer) {
-            UVC_DEBUG("Freeing orphan transfer %d (%p)", i, transfer);
-            free(transfer->buffer);
-            libusb_free_transfer(transfer);
-            strmh->transfers[i] = NULL;
-            break;
-          }
+        auto it = std::find_if(
+          std::begin(strmh->transfers),
+          std::end(strmh->transfers),
+          [&](const std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>& t)
+          {
+            return t.get() == transfer;
+          });
+        if (it != std::end(strmh->transfers))
+        {
+          // TODO: Do I need to check *it (operator bool) first?
+          UVC_DEBUG("Freeing orphan transfer (%p)", transfer);
+          it->reset();
         }
-        if(i == LIBUVC_NUM_TRANSFER_BUFS ) {
-          UVC_DEBUG("orphan transfer %p not found; not freeing!", transfer);
+        else
+        {
+          UVC_DEBUG("failed transfer %p not found; not freeing!", transfer);
         }
       }
       strmh->callback_cond.notify_all();
@@ -1034,7 +1049,6 @@ uvc_error_t uvc_stream_start(
   int ret;
   /* Total amount of data per transfer */
   size_t total_transfer_size = 0;
-  struct libusb_transfer *transfer;
   int transfer_id;
 
   ctrl = &strmh->cur_ctrl;
@@ -1152,31 +1166,31 @@ uvc_error_t uvc_stream_start(
     }
 
     /* Set up the transfers */
-    for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; ++transfer_id) {
-      transfer = libusb_alloc_transfer(packets_per_transfer);
-      strmh->transfers[transfer_id] = transfer;      
-      strmh->transfer_bufs[transfer_id] = (uint8_t *)malloc(total_transfer_size);
-
+    for (auto &transfer : strmh->transfers)
+    {
+      transfer = std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>(
+        libusb_alloc_transfer(packets_per_transfer));
+      uint8_t *buf = (uint8_t *)malloc(total_transfer_size);
+      
       libusb_fill_iso_transfer(
-        transfer, strmh->devh->usb_devh, format_desc->parent->bEndpointAddress,
-        strmh->transfer_bufs[transfer_id],
+        transfer.get(), strmh->devh->usb_devh, format_desc->parent->bEndpointAddress, buf,
         total_transfer_size, packets_per_transfer, _uvc_stream_callback, (void*) strmh, 5000);
 
-      libusb_set_iso_packet_lengths(transfer, endpoint_bytes_per_packet);
+      libusb_set_iso_packet_lengths(transfer.get(), endpoint_bytes_per_packet);
     }
   } else {
-    for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
-        ++transfer_id) {
-      transfer = libusb_alloc_transfer(0);
-      strmh->transfers[transfer_id] = transfer;
-      strmh->transfer_bufs[transfer_id] = (uint8_t *)malloc (
-          strmh->cur_ctrl.dwMaxPayloadTransferSize );
-      libusb_fill_bulk_transfer ( transfer, strmh->devh->usb_devh,
-          format_desc->parent->bEndpointAddress,
-          strmh->transfer_bufs[transfer_id],
-          strmh->cur_ctrl.dwMaxPayloadTransferSize, _uvc_stream_callback,
-          ( void* ) strmh, 5000 );
-    }
+    for (auto &transfer : strmh->transfers)
+    {
+      transfer = std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>(
+        libusb_alloc_transfer(0));
+      uint8_t *buf = (uint8_t *)malloc(strmh->cur_ctrl.dwMaxPayloadTransferSize);
+      
+      libusb_fill_bulk_transfer(
+        transfer.get(), strmh->devh->usb_devh,
+        format_desc->parent->bEndpointAddress, buf,
+        strmh->cur_ctrl.dwMaxPayloadTransferSize, _uvc_stream_callback,
+        ( void* ) strmh, 5000 );
+    }    
   }
 
   strmh->user_cb = cb;
@@ -1189,22 +1203,22 @@ uvc_error_t uvc_stream_start(
     strmh->callback_thread = std::thread(_uvc_user_caller, (void*) strmh);
   }
 
-  for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
-      transfer_id++) {
-    ret = libusb_submit_transfer(strmh->transfers[transfer_id]);
-    if (ret != UVC_SUCCESS) {
-      UVC_DEBUG("libusb_submit_transfer failed: %d",ret);
-      break;
+  {
+    auto it = std::begin(strmh->transfers);
+    for ( ; it != std::end(strmh->transfers); ++it) {
+      ret = libusb_submit_transfer(it->get());
+      if (ret != UVC_SUCCESS) {
+        UVC_DEBUG("libusb_submit_transfer failed: %d",ret);
+        break;
+      }
     }
-  }
 
-  if ( ret != UVC_SUCCESS && transfer_id > 0 ) {
-    for ( ; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; transfer_id++) {
-      free ( strmh->transfers[transfer_id]->buffer );
-      libusb_free_transfer ( strmh->transfers[transfer_id]);
-      strmh->transfers[transfer_id] = 0;
+    if ( ret != UVC_SUCCESS && it != std::begin(strmh->transfers) ) {
+      for ( ; it != std::end(strmh->transfers); ++it) {
+        it->reset();
+      }
+      ret = UVC_SUCCESS;
     }
-    ret = UVC_SUCCESS;
   }
 
   UVC_EXIT(ret);
@@ -1413,24 +1427,31 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
   {
     std::unique_lock<std::mutex> lock(strmh->callback_mutex);
 
-    for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-      if(strmh->transfers[i] != NULL) {
-        int res = libusb_cancel_transfer(strmh->transfers[i]);
+#if 0
+    // Allow libusb callback function to reset() unique_ptr<libusb_transfer>
+    // objects instead of doing it here. Then below, we block until all
+    // unique_ptr<libusb_transfer>'s are reset.
+    // @todo Should there be a timeout in case transfers are not reset?
+    for (auto transfer : strmh->transfers)
+    {
+      if (transfer)
+      {
+        int res = libusb_cancel_transfer(transfer.get());
         if(res < 0 && res != LIBUSB_ERROR_NOT_FOUND ) {
-          free(strmh->transfers[i]->buffer);
-          libusb_free_transfer(strmh->transfers[i]);
-          strmh->transfers[i] = NULL;
-        }
+          transfer.reset();
+        }        
       }
     }
+#endif    
 
     /* Wait for transfers to complete/cancel */
     do {
-      for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-        if(strmh->transfers[i] != NULL)
+      auto it = std::begin(strmh->transfers);
+      for ( ; it != std::end(strmh->transfers); ++it) {
+        if (*it)
           break;
       }
-      if(i == LIBUVC_NUM_TRANSFER_BUFS )
+      if (it == std::end(strmh->transfers))
         break;
       strmh->callback_cond.wait(lock);
     } while(1);

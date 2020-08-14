@@ -145,8 +145,6 @@ void Camera::CloseDevice()
 {
   if (devh_ != nullptr)
   {
-    printf("uvc_stop_streaming\n");
-    uvc_stop_streaming(devh_);
     printf("uvc_close\n");
     uvc_close(devh_);
     devh_ = nullptr;
@@ -225,10 +223,11 @@ void Camera::LibuvcCallback(uvc_frame_t *frame, void *ptr) {
 // main
 // -----------------------------------------------------------------------------
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   uvc_context_t *ctx;
   uvc_error_t res;
-  
+
   /* Initialize a UVC service context. Libuvc will set up its own libusb
    * context. Replace NULL with a libusb_context pointer to run libuvc
    * from an existing libusb context. */
@@ -244,17 +243,27 @@ int main(int argc, char **argv) {
 
   camera1.OpenDevice();
   camera1.StartStreaming();
-  std::this_thread::sleep_for(std::chrono::seconds(4));
+  std::this_thread::sleep_for(std::chrono::seconds(5));
   camera1.CloseDevice();
 
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::seconds(0));
 
-#if 0
   camera2.OpenDevice();
   camera2.StartStreaming();
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::seconds(5));
   camera2.CloseDevice();
-#endif
+
+  camera1.OpenDevice();
+  camera1.StartStreaming();
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  camera1.CloseDevice();
+
+  std::this_thread::sleep_for(std::chrono::seconds(0));
+
+  camera2.OpenDevice();
+  camera2.StartStreaming();
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  camera2.CloseDevice();
 
   /* Close the UVC context. This closes and cleans up any existing device handles,
    * and it closes the libusb context if one was not provided. */
