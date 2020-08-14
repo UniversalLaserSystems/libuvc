@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <vector>
 #pragma warning (disable:4200)
 #include <libusb-1.0/libusb.h>
 #pragma warning (default:4200)
@@ -234,28 +235,36 @@ struct uvc_stream_handle {
   struct uvc_stream_ctrl cur_ctrl;
 
   /* listeners may only access hold*, and only when holding a
-   * lock on cb_mutex (probably signaled with cb_cond) */
+   * lock on cb_mutex (probably signaled with cb_cond)
+   *
+   * The struct libusb_transfer* callback (_uvc_stream_callback) copies bytes
+   * to uint8_t *outbuf. When outbuf contains a full frame (determined by EOF
+   * bit), the contents of oubuf are copied to uint8_t *holdbuf and
+   * callback_cond is notified. The waiting _uvc_user_caller() thread then
+   * calls the user's callback function with the completed frame.
+   */
+  
   uint8_t fid;
   uint32_t seq, hold_seq;
   uint32_t pts, hold_pts;
   uint32_t last_scr, hold_last_scr;
-  size_t got_bytes, hold_bytes;
-  uint8_t *outbuf, *holdbuf;
+  std::vector<uint8_t> outbuf;
+  std::vector<uint8_t> holdbuf;
   std::mutex callback_mutex;
   std::condition_variable callback_cond;
   std::thread callback_thread;
   uint32_t last_polled_seq;
   uvc_frame_callback_t *user_cb;
   void *user_ptr;
+  /* The libusb_transfer's and their data buffers. */
   struct libusb_transfer *transfers[LIBUVC_NUM_TRANSFER_BUFS];
   uint8_t *transfer_bufs[LIBUVC_NUM_TRANSFER_BUFS];
   struct uvc_frame frame;
   enum uvc_frame_format frame_format;
   std::chrono::steady_clock::time_point capture_time_finished;
-
   /* raw metadata buffer if available */
-  uint8_t *meta_outbuf, *meta_holdbuf;
-  size_t meta_got_bytes, meta_hold_bytes;
+  std::vector<uint8_t> meta_outbuf;
+  std::vector<uint8_t> meta_holdbuf;
 
   uvc_stream_handle()
     : devh(nullptr)
@@ -271,10 +280,6 @@ struct uvc_stream_handle {
     , hold_pts(0)
     , last_scr(0)
     , hold_last_scr(0)
-    , got_bytes(0)
-    , hold_bytes(0)
-    , outbuf(nullptr)
-    , holdbuf(nullptr)
     , last_polled_seq(0)
     , user_cb(nullptr)
     , user_ptr(nullptr)
@@ -283,12 +288,18 @@ struct uvc_stream_handle {
     //, frame default constructed
     , frame_format(UVC_FRAME_FORMAT_UNKNOWN)
     //, capture_time_finished default constructed
-    , meta_outbuf(nullptr)
-    , meta_holdbuf(nullptr)
-    , meta_got_bytes(0)
-    , meta_hold_bytes(0) {
+  {
+    /** @todo take only what we need */
+    outbuf.reserve(LIBUVC_XFER_BUF_SIZE);
+    holdbuf.reserve(LIBUVC_XFER_BUF_SIZE);
+    meta_outbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
+    meta_holdbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
+
     memset(transfers, 0, sizeof(transfers));
     memset(transfer_bufs, 0, sizeof(transfer_bufs));
+  }
+
+  ~uvc_stream_handle() {
   }
 };
 

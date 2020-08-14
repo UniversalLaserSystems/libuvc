@@ -4,8 +4,8 @@
 //
 //   * sudo apt install libgtk2.0-dev
 //
-// mkdir build && cd build
-// cmake -G "Unix Makefiles" ..
+// ./cmake-linux.sh
+// cd build_debug
 // make
 //
 // Plugin camera
@@ -147,7 +147,7 @@ void Camera::CloseDevice()
   {
     printf("uvc_stop_streaming\n");
     uvc_stop_streaming(devh_);
-    printf("uvc_close");
+    printf("uvc_close\n");
     uvc_close(devh_);
     devh_ = nullptr;
   }
@@ -244,16 +244,18 @@ int main(int argc, char **argv) {
 
   camera1.OpenDevice();
   camera1.StartStreaming();
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::seconds(4));
   camera1.CloseDevice();
 
   std::this_thread::sleep_for(std::chrono::seconds(2));
 
+#if 0
   camera2.OpenDevice();
   camera2.StartStreaming();
   std::this_thread::sleep_for(std::chrono::seconds(2));
   camera2.CloseDevice();
-  
+#endif
+
   /* Close the UVC context. This closes and cleans up any existing device handles,
    * and it closes the libusb context if one was not provided. */
   uvc_exit(ctx);

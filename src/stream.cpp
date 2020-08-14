@@ -622,25 +622,23 @@ void _uvc_swap_buffers(uvc_stream_handle_t *strmh) {
     strmh->capture_time_finished = std::chrono::steady_clock::now();
 
     /* swap the buffers */
-    tmp_buf = strmh->holdbuf;
-    strmh->hold_bytes = strmh->got_bytes;
-    strmh->holdbuf = strmh->outbuf;
-    strmh->outbuf = tmp_buf;
+    std::swap(strmh->outbuf, strmh->holdbuf);
     strmh->hold_last_scr = strmh->last_scr;
     strmh->hold_pts = strmh->pts;
     strmh->hold_seq = strmh->seq;
   
     /* swap metadata buffer */
-    tmp_buf = strmh->meta_holdbuf;
-    strmh->meta_holdbuf = strmh->meta_outbuf;
-    strmh->meta_outbuf = tmp_buf;
-    strmh->meta_hold_bytes = strmh->meta_got_bytes;
+    std::swap(strmh->meta_outbuf, strmh->meta_holdbuf);
   }
   strmh->callback_cond.notify_all();
 
+  /* clear the buffers, but re-reserve capacity (the C++ standard does not
+   * guarantee the capacity stays the same after a clear). */
+  strmh->outbuf.clear();
+  strmh->outbuf.reserve(LIBUVC_XFER_BUF_SIZE);
+  strmh->meta_outbuf.clear();
+  strmh->meta_outbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
   strmh->seq++;
-  strmh->got_bytes = 0;
-  strmh->meta_got_bytes = 0;
   strmh->last_scr = 0;
   strmh->pts = 0;
 }
@@ -711,7 +709,7 @@ void _uvc_process_payload(uvc_stream_handle_t *strmh, uint8_t *payload, size_t p
       return;
     }
 
-    if (strmh->fid != (header_info & 1) && strmh->got_bytes != 0) {
+    if (strmh->fid != (header_info & 1) && !strmh->outbuf.empty()) {
       /* The frame ID bit was flipped, but we have image data sitting
          around from prior transfers. This means the camera didn't send
          an EOF for the last transfer of the previous frame. */
@@ -733,15 +731,17 @@ void _uvc_process_payload(uvc_stream_handle_t *strmh, uint8_t *payload, size_t p
 
     if (header_len > variable_offset)
     {
-        // Metadata is attached to header
-        memcpy(strmh->meta_outbuf + strmh->meta_got_bytes, payload + variable_offset, header_len - variable_offset);
-        strmh->meta_got_bytes += header_len - variable_offset;
+      // Metadata is attached to header
+      size_t sz = header_len - variable_offset;
+      uint8_t *src = payload + variable_offset;
+      std::copy(src, src+sz, std::back_inserter(strmh->meta_outbuf));
     }
   }
 
   if (data_len > 0) {
-    memcpy(strmh->outbuf + strmh->got_bytes, payload + header_len, data_len);
-    strmh->got_bytes += data_len;
+
+    uint8_t *src = payload + header_len;
+    std::copy(src, src+data_len, std::back_inserter(strmh->outbuf));
 
     if (header_info & (1 << 1)) {
       /* The EOF bit is set, so publish the complete frame */
@@ -995,12 +995,6 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
 
   // Set up the streaming status and data space
   strmh->running = 0;
-  /** @todo take only what we need */
-  strmh->outbuf = (uint8_t *)malloc( LIBUVC_XFER_BUF_SIZE );
-  strmh->holdbuf = (uint8_t *)malloc( LIBUVC_XFER_BUF_SIZE );
-
-  strmh->meta_outbuf = (uint8_t *)malloc( LIBUVC_XFER_META_BUF_SIZE );
-  strmh->meta_holdbuf = (uint8_t *)malloc( LIBUVC_XFER_META_BUF_SIZE );
    
   DL_APPEND(devh->streams, strmh);
 
@@ -1316,20 +1310,22 @@ void _uvc_populate_frame(uvc_stream_handle_t *strmh) {
   frame->capture_time_finished = strmh->capture_time_finished;
 
   /* copy the image data from the hold buffer to the frame (unnecessary extra buf?) */
-  if (frame->data_bytes < strmh->hold_bytes) {
-    frame->data = realloc(frame->data, strmh->hold_bytes);
+  auto sz = strmh->holdbuf.size();
+  if (frame->data_bytes < sz) {
+    frame->data = realloc(frame->data, sz);
   }
-  frame->data_bytes = strmh->hold_bytes;
-  memcpy(frame->data, strmh->holdbuf, frame->data_bytes);
+  frame->data_bytes = sz;
+  memcpy(frame->data, strmh->holdbuf.data(), sz);
 
-  if (strmh->meta_hold_bytes > 0)
+  if (!strmh->meta_holdbuf.empty())
   {
-      if (frame->metadata_bytes < strmh->meta_hold_bytes)
-      {
-          frame->metadata = realloc(frame->metadata, strmh->meta_hold_bytes);
-      }
-      frame->metadata_bytes = strmh->meta_hold_bytes;
-      memcpy(frame->metadata, strmh->meta_holdbuf, frame->metadata_bytes);
+    auto sz = strmh->meta_holdbuf.size();
+    if (frame->metadata_bytes < sz)
+    {
+      frame->metadata = realloc(frame->metadata, sz);
+    }
+    frame->metadata_bytes = sz;
+    memcpy(frame->metadata, strmh->meta_holdbuf.data(), sz);
   }
 }
 
@@ -1471,12 +1467,6 @@ void uvc_stream_close(uvc_stream_handle_t *strmh) {
 
   if (strmh->frame.data)
     free(strmh->frame.data);
-
-  free(strmh->outbuf);
-  free(strmh->holdbuf);
-
-  free(strmh->meta_outbuf);
-  free(strmh->meta_holdbuf);
 
   DL_DELETE(strmh->devh->streams, strmh);
   delete strmh;
