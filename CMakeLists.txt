@@ -47,7 +47,6 @@ set(SOURCES
   src/frame.cpp
   src/init.cpp
   src/stream.cpp
-  src/misc.cpp
 )
 
 find_package(LibUSB)

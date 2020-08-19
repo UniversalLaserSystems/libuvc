@@ -23,8 +23,11 @@ if (NOT TARGET LibUSB::LibUSB)
   endif()
 
   if(LibUSB_FOUND)
-    # LibUSB_LIBRARIES, LibUSB_INCLUDE_DIRS, etc set by pkg_check_modules
+    # LibUSB_LIBRARIES and LibUSB_INCLUDEDIR are set by pkg_check_modules
+    # From those, set LibUSB_LIBRARY and LibUSB_INCLUDE_DIRS which will be
+    # set as target properties below.
     message(STATUS "libusb-1.0 found using pkgconfig")
+    set(LibUSB_INCLUDE_DIRS ${LibUSB_INCLUDEDIR})
     find_library(LibUSB_LIBRARY
       NAMES ${LibUSB_LIBRARIES}
       PATHS ${LibUSB_LIBDIR}

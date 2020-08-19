@@ -266,7 +266,7 @@ struct uvc_stream_handle {
    * libusb_transfer also has a buffer member that we are responsible for
    * freeing which is done by the custom deleter, libusb_transfer_deleter.
    */
-  std::vector<std::unique_ptr<struct libusb_transfer, libusb_transfer_deleter>> transfers;
+  std::vector<std::unique_ptr<struct libusb_transfer, libusb_transfer_deleter> > transfers;
   struct uvc_frame frame;
   enum uvc_frame_format frame_format;
   std::chrono::steady_clock::time_point capture_time_finished;
