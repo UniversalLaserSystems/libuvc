@@ -1,17 +1,18 @@
-// Example code taken from https://ken.tossell.net/libuvc/doc/ and slightly modified.
+// Example code taken from https://ken.tossell.net/libuvc/doc/ and  modified.
 //
-// Also did these steps:
+// This example alternates video streaming between 2 cameras. Tested on Linux,
+// Mac and Windows.
 //
-//   * sudo apt install libgtk2.0-dev
+// 
+// Linux
 //
-// ./cmake-linux.sh
-// cd build_debug
-// make
+//   * Requires libgtk2.0-dev, libusb-1.0
+//   * Requires USB device file permissions. For each camera:
+//     1. Plugin camera
+//     2. Use lsusb to find your camera bus and device number
+//     3. sudo chmod 666 /dev/bus/<bus>/<device>       # so libusb can access device
+//   * ./example
 //
-// Plugin camera
-//  1. Use lsusb to find your camera bus and device number
-//  2. sudo chmod 666 /dev/bus/<bus>/<device>       # so libusb can access device
-//  3. ./example
 
 
 #ifdef _WIN32
@@ -199,9 +200,8 @@ void Camera::LibuvcCallback(uvc_frame_t *frame, void *ptr) {
   cv::Mat toBgr;
   cv::cvtColor(mat, toBgr, cv::COLOR_RGB2BGR);
 
-#if _WIN32
-  // I don't have OpenCV configured with GUI support on Windows so
-  // for now, just write images to file instead of displaying in window.
+#if defined(_WIN32) || defined(__APPLE__)
+  // No OpenCV GUI support On Windows and Mac; just write image to file.
   ostringstream ss;
   ss << "image_"
      << hex << camera->vid_ << "_"
