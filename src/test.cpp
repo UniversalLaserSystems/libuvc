@@ -32,6 +32,8 @@
 *  POSSIBILITY OF SUCH DAMAGE.
 *********************************************************************/
 #include <stdio.h>
+#include <chrono>
+#include <thread>
 #include <opencv2/highgui/highgui_c.h>
 
 #include "libuvc/libuvc.h"
@@ -130,9 +132,9 @@ int main(int argc, char **argv) {
             uvc_error_t resEXP = uvc_set_exposure_abs(devh, 20 + i * 5);
             uvc_perror(resEXP, "set_exp_abs");
             
-            sleep(1);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
           }
-          sleep(10);
+          std::this_thread::sleep_for(std::chrono::seconds(10));
           uvc_stop_streaming(devh);
 	  puts("Done streaming.");
         }

@@ -39,33 +39,9 @@
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
 #include "errno.h"
+#include <algorithm>
+#include <memory>
 
-#ifdef _MSC_VER
-
-#define DELTA_EPOCH_IN_MICROSECS  116444736000000000Ui64
-
-// gettimeofday - get time of day for Windows;
-// A gettimeofday implementation for Microsoft Windows;
-// Public domain code, author "ponnada";
-int gettimeofday(struct timeval *tv, struct timezone *tz)
-{
-    FILETIME ft;
-    unsigned __int64 tmpres = 0;
-    static int tzflag = 0;
-    if (NULL != tv)
-    {
-        GetSystemTimeAsFileTime(&ft);
-        tmpres |= ft.dwHighDateTime;
-        tmpres <<= 32;
-        tmpres |= ft.dwLowDateTime;
-        tmpres /= 10;
-        tmpres -= DELTA_EPOCH_IN_MICROSECS;
-        tv->tv_sec = (long)(tmpres / 1000000UL);
-        tv->tv_usec = (long)(tmpres % 1000000UL);
-    }
-    return 0;
-}
-#endif // _MSC_VER
 uvc_frame_desc_t *uvc_find_frame_desc_stream(uvc_stream_handle_t *strmh,
     uint16_t format_id, uint16_t frame_id);
 uvc_frame_desc_t *uvc_find_frame_desc(uvc_device_handle_t *devh,
@@ -166,10 +142,10 @@ static uint8_t _uvc_frame_format_matches_guid(enum uvc_frame_format fmt, uint8_t
 
 static enum uvc_frame_format uvc_frame_format_for_guid(uint8_t guid[16]) {
   struct format_table_entry *format;
-  enum uvc_frame_format fmt;
+  int fmt;
 
   for (fmt = 0; fmt < UVC_FRAME_FORMAT_COUNT; ++fmt) {
-    format = _get_format_entry(fmt);
+    format = _get_format_entry(static_cast<enum uvc_frame_format>(fmt));
     if (!format || format->abstract_fmt)
       continue;
     if (!memcmp(format->guid, guid, 16))
@@ -193,7 +169,7 @@ uvc_error_t uvc_query_stream_ctrl(
     enum uvc_req_code req) {
   uint8_t buf[34];
   size_t len;
-  uvc_error_t err;
+  int err;
 
   memset(buf, 0, sizeof(buf));
 
@@ -237,7 +213,7 @@ uvc_error_t uvc_query_stream_ctrl(
   );
 
   if (err <= 0) {
-    return err;
+    return static_cast<uvc_error_t>(err);
   }
 
   /* now decode following a GET transfer */
@@ -293,7 +269,7 @@ uvc_error_t uvc_query_still_ctrl(
 
   uint8_t buf[11];
   const size_t len = 11;
-  uvc_error_t err;
+  int err;
 
   memset(buf, 0, sizeof(buf));
 
@@ -317,7 +293,7 @@ uvc_error_t uvc_query_still_ctrl(
   );
 
   if (err <= 0) {
-    return err;
+    return static_cast<uvc_error_t>(err);
   }
 
   /* now decode following a GET transfer */
@@ -344,7 +320,7 @@ uvc_error_t uvc_trigger_still(
   uvc_stream_handle_t* stream;
   uvc_streaming_interface_t* stream_if;
   uint8_t buf;
-  uvc_error_t err;
+  int err;
 
   /* Stream must be running for method 2 to work */
   stream = _uvc_get_stream_by_interface(devh, still_ctrl->bInterfaceNumber);
@@ -369,7 +345,7 @@ uvc_error_t uvc_trigger_still(
       &buf, 1, 0);
 
   if (err <= 0) {
-    return err;
+    return static_cast<uvc_error_t>(err);
   }
 
   return UVC_SUCCESS;
@@ -635,7 +611,7 @@ uvc_error_t uvc_probe_still_ctrl(
     }
   }
 
-  return res;
+  return static_cast<uvc_error_t>(res);
 }
 
 /** @internal
@@ -643,32 +619,28 @@ uvc_error_t uvc_probe_still_ctrl(
  */
 void _uvc_swap_buffers(uvc_stream_handle_t *strmh) {
   uint8_t *tmp_buf;
+  {
+    std::lock_guard<std::mutex> lock(strmh->callback_mutex);
+    strmh->capture_time_finished = std::chrono::steady_clock::now();
 
-  pthread_mutex_lock(&strmh->cb_mutex);
-
-  (void)clock_gettime(CLOCK_MONOTONIC, &strmh->capture_time_finished);
-
-  /* swap the buffers */
-  tmp_buf = strmh->holdbuf;
-  strmh->hold_bytes = strmh->got_bytes;
-  strmh->holdbuf = strmh->outbuf;
-  strmh->outbuf = tmp_buf;
-  strmh->hold_last_scr = strmh->last_scr;
-  strmh->hold_pts = strmh->pts;
-  strmh->hold_seq = strmh->seq;
+    /* swap the buffers */
+    std::swap(strmh->outbuf, strmh->holdbuf);
+    strmh->hold_last_scr = strmh->last_scr;
+    strmh->hold_pts = strmh->pts;
+    strmh->hold_seq = strmh->seq;
   
-  /* swap metadata buffer */
-  tmp_buf = strmh->meta_holdbuf;
-  strmh->meta_holdbuf = strmh->meta_outbuf;
-  strmh->meta_outbuf = tmp_buf;
-  strmh->meta_hold_bytes = strmh->meta_got_bytes;
+    /* swap metadata buffer */
+    std::swap(strmh->meta_outbuf, strmh->meta_holdbuf);
+  }
+  strmh->callback_cond.notify_all();
 
-  pthread_cond_broadcast(&strmh->cb_cond);
-  pthread_mutex_unlock(&strmh->cb_mutex);
-
+  /* clear the buffers, but re-reserve capacity (the C++ standard does not
+   * guarantee the capacity stays the same after a clear). */
+  strmh->outbuf.clear();
+  strmh->outbuf.reserve(uvc_stream_config.size_of_transport_buffer);
+  strmh->meta_outbuf.clear();
+  strmh->meta_outbuf.reserve(uvc_stream_config.size_of_meta_transport_buffer);
   strmh->seq++;
-  strmh->got_bytes = 0;
-  strmh->meta_got_bytes = 0;
   strmh->last_scr = 0;
   strmh->pts = 0;
 }
@@ -739,7 +711,7 @@ void _uvc_process_payload(uvc_stream_handle_t *strmh, uint8_t *payload, size_t p
       return;
     }
 
-    if (strmh->fid != (header_info & 1) && strmh->got_bytes != 0) {
+    if (strmh->fid != (header_info & 1) && !strmh->outbuf.empty()) {
       /* The frame ID bit was flipped, but we have image data sitting
          around from prior transfers. This means the camera didn't send
          an EOF for the last transfer of the previous frame. */
@@ -761,15 +733,17 @@ void _uvc_process_payload(uvc_stream_handle_t *strmh, uint8_t *payload, size_t p
 
     if (header_len > variable_offset)
     {
-        // Metadata is attached to header
-        memcpy(strmh->meta_outbuf + strmh->meta_got_bytes, payload + variable_offset, header_len - variable_offset);
-        strmh->meta_got_bytes += header_len - variable_offset;
+      // Metadata is attached to header
+      size_t sz = header_len - variable_offset;
+      uint8_t *src = payload + variable_offset;
+      std::copy(src, src+sz, std::back_inserter(strmh->meta_outbuf));
     }
   }
 
   if (data_len > 0) {
-    memcpy(strmh->outbuf + strmh->got_bytes, payload + header_len, data_len);
-    strmh->got_bytes += data_len;
+
+    uint8_t *src = payload + header_len;
+    std::copy(src, src+data_len, std::back_inserter(strmh->outbuf));
 
     if (header_info & (1 << 1)) {
       /* The EOF bit is set, so publish the complete frame */
@@ -787,7 +761,7 @@ void _uvc_process_payload(uvc_stream_handle_t *strmh, uint8_t *payload, size_t p
  * @param transfer Active transfer
  */
 void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
-  uvc_stream_handle_t *strmh = transfer->user_data;
+  uvc_stream_handle_t *strmh = (uvc_stream_handle_t *)transfer->user_data;
 
   int resubmit = 1;
 
@@ -823,27 +797,31 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
   case LIBUSB_TRANSFER_NO_DEVICE: {
     int i;
     UVC_DEBUG("not retrying transfer, status = %d", transfer->status);
-    pthread_mutex_lock(&strmh->cb_mutex);
+    {
+      std::lock_guard<std::mutex> lock(strmh->callback_mutex);
 
-    /* Mark transfer as deleted. */
-    for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-      if(strmh->transfers[i] == transfer) {
-        UVC_DEBUG("Freeing transfer %d (%p)", i, transfer);
-        free(transfer->buffer);
-        libusb_free_transfer(transfer);
-        strmh->transfers[i] = NULL;
-        break;
+      auto it = std::find_if(
+        std::begin(strmh->transfers),
+        std::end(strmh->transfers),
+        [&](const std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>& t)
+        {
+          return t.get() == transfer;
+        });
+      if (it != std::end(strmh->transfers))
+      {
+        // Delete managed object
+        // TODO: Do I need to check *it (operator bool) first?
+        UVC_DEBUG("Freeing transfer (%p)", transfer);
+        it->reset();
       }
+      else
+      {
+        UVC_DEBUG("transfer %p not found; not freeing!", transfer);
+      }
+
+      resubmit = 0;
     }
-    if(i == LIBUVC_NUM_TRANSFER_BUFS ) {
-      UVC_DEBUG("transfer %p not found; not freeing!", transfer);
-    }
-
-    resubmit = 0;
-
-    pthread_cond_broadcast(&strmh->cb_cond);
-    pthread_mutex_unlock(&strmh->cb_mutex);
-
+    strmh->callback_cond.notify_all();
     break;
   }
   case LIBUSB_TRANSFER_TIMED_OUT:
@@ -858,46 +836,54 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
       int libusbRet = libusb_submit_transfer(transfer);
       if (libusbRet < 0)
       {
-        int i;
-        pthread_mutex_lock(&strmh->cb_mutex);
+        {
+          std::lock_guard<std::mutex> lock(strmh->callback_mutex);
 
-        /* Mark transfer as deleted. */
-        for (i = 0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-          if (strmh->transfers[i] == transfer) {
-            UVC_DEBUG("Freeing failed transfer %d (%p)", i, transfer);
-            free(transfer->buffer);
-            libusb_free_transfer(transfer);
-            strmh->transfers[i] = NULL;
-            break;
+          /* Mark transfer as deleted. */
+          auto it = std::find_if(
+            std::begin(strmh->transfers),
+            std::end(strmh->transfers),
+            [&](const std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>& t)
+            {
+              return t.get() == transfer;
+            });
+          if (it != std::end(strmh->transfers))
+          {
+            // TODO: Do I need to check *it (operator bool) first?
+            UVC_DEBUG("Freeing failed transfer (%p)", transfer);
+            it->reset();
+          }
+          else
+          {
+            UVC_DEBUG("failed transfer %p not found; not freeing!", transfer);
           }
         }
-        if (i == LIBUVC_NUM_TRANSFER_BUFS) {
-          UVC_DEBUG("failed transfer %p not found; not freeing!", transfer);
-        }
-
-        pthread_cond_broadcast(&strmh->cb_cond);
-        pthread_mutex_unlock(&strmh->cb_mutex);
+        strmh->callback_cond.notify_all();
       }
     } else {
-      int i;
-      pthread_mutex_lock(&strmh->cb_mutex);
+      {
+        std::lock_guard<std::mutex> lock(strmh->callback_mutex);        
 
-      /* Mark transfer as deleted. */
-      for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-        if(strmh->transfers[i] == transfer) {
-          UVC_DEBUG("Freeing orphan transfer %d (%p)", i, transfer);
-          free(transfer->buffer);
-          libusb_free_transfer(transfer);
-          strmh->transfers[i] = NULL;
-          break;
+        /* Mark transfer as deleted. */
+        auto it = std::find_if(
+          std::begin(strmh->transfers),
+          std::end(strmh->transfers),
+          [&](const std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>& t)
+          {
+            return t.get() == transfer;
+          });
+        if (it != std::end(strmh->transfers))
+        {
+          // TODO: Do I need to check *it (operator bool) first?
+          UVC_DEBUG("Freeing orphan transfer (%p)", transfer);
+          it->reset();
+        }
+        else
+        {
+          UVC_DEBUG("failed transfer %p not found; not freeing!", transfer);
         }
       }
-      if(i == LIBUVC_NUM_TRANSFER_BUFS ) {
-        UVC_DEBUG("orphan transfer %p not found; not freeing!", transfer);
-      }
-
-      pthread_cond_broadcast(&strmh->cb_cond);
-      pthread_mutex_unlock(&strmh->cb_mutex);
+      strmh->callback_cond.notify_all();
     }
   }
 }
@@ -979,6 +965,22 @@ static uvc_streaming_interface_t *_uvc_get_stream_if(uvc_device_handle_t *devh, 
   return NULL;
 }
 
+struct uvc_stream_config_t uvc_stream_config = {
+  20, // number_of_transport_buffers
+  8 * 1024 * 1024, // size_of_transport_buffer
+  4 * 1024 // size_of_meta_transport_buffer
+};
+
+void uvc_stream_set_default_number_of_transport_buffers(size_t s) {
+  uvc_stream_config.number_of_transport_buffers = s;
+}
+void uvc_stream_set_default_size_of_transport_buffer(size_t s) {
+  uvc_stream_config.size_of_transport_buffer = s;
+}
+void uvc_stream_set_default_size_of_meta_transport_buffer(size_t s) {
+  uvc_stream_config.size_of_meta_transport_buffer = s;
+}
+
 /** Open a new video stream.
  * @ingroup streaming
  *
@@ -1005,7 +1007,7 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
     goto fail;
   }
 
-  strmh = calloc(1, sizeof(*strmh));
+  strmh = new uvc_stream_handle_t();
   if (!strmh) {
     ret = UVC_ERROR_NO_MEM;
     goto fail;
@@ -1024,16 +1026,7 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
 
   // Set up the streaming status and data space
   strmh->running = 0;
-  /** @todo take only what we need */
-  strmh->outbuf = malloc( LIBUVC_XFER_BUF_SIZE );
-  strmh->holdbuf = malloc( LIBUVC_XFER_BUF_SIZE );
-
-  strmh->meta_outbuf = malloc( LIBUVC_XFER_META_BUF_SIZE );
-  strmh->meta_holdbuf = malloc( LIBUVC_XFER_META_BUF_SIZE );
    
-  pthread_mutex_init(&strmh->cb_mutex, NULL);
-  pthread_cond_init(&strmh->cb_cond, NULL);
-
   DL_APPEND(devh->streams, strmh);
 
   *strmhp = strmh;
@@ -1042,8 +1035,8 @@ uvc_error_t uvc_stream_open_ctrl(uvc_device_handle_t *devh, uvc_stream_handle_t 
   return UVC_SUCCESS;
 
 fail:
-  if(strmh)
-    free(strmh);
+  if (strmh)
+    delete strmh;
   UVC_EXIT(ret);
   return ret;
 }
@@ -1069,10 +1062,9 @@ uvc_error_t uvc_stream_start(
   uvc_frame_desc_t *frame_desc;
   uvc_format_desc_t *format_desc;
   uvc_stream_ctrl_t *ctrl;
-  uvc_error_t ret;
+  int ret;
   /* Total amount of data per transfer */
   size_t total_transfer_size = 0;
-  struct libusb_transfer *transfer;
   int transfer_id;
 
   ctrl = &strmh->cur_ctrl;
@@ -1190,31 +1182,31 @@ uvc_error_t uvc_stream_start(
     }
 
     /* Set up the transfers */
-    for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; ++transfer_id) {
-      transfer = libusb_alloc_transfer(packets_per_transfer);
-      strmh->transfers[transfer_id] = transfer;      
-      strmh->transfer_bufs[transfer_id] = malloc(total_transfer_size);
-
+    for (auto &transfer : strmh->transfers)
+    {
+      transfer = std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>(
+        libusb_alloc_transfer(packets_per_transfer));
+      uint8_t *buf = (uint8_t *)malloc(total_transfer_size);
+      
       libusb_fill_iso_transfer(
-        transfer, strmh->devh->usb_devh, format_desc->parent->bEndpointAddress,
-        strmh->transfer_bufs[transfer_id],
+        transfer.get(), strmh->devh->usb_devh, format_desc->parent->bEndpointAddress, buf,
         total_transfer_size, packets_per_transfer, _uvc_stream_callback, (void*) strmh, 5000);
 
-      libusb_set_iso_packet_lengths(transfer, endpoint_bytes_per_packet);
+      libusb_set_iso_packet_lengths(transfer.get(), endpoint_bytes_per_packet);
     }
   } else {
-    for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
-        ++transfer_id) {
-      transfer = libusb_alloc_transfer(0);
-      strmh->transfers[transfer_id] = transfer;
-      strmh->transfer_bufs[transfer_id] = malloc (
-          strmh->cur_ctrl.dwMaxPayloadTransferSize );
-      libusb_fill_bulk_transfer ( transfer, strmh->devh->usb_devh,
-          format_desc->parent->bEndpointAddress,
-          strmh->transfer_bufs[transfer_id],
-          strmh->cur_ctrl.dwMaxPayloadTransferSize, _uvc_stream_callback,
-          ( void* ) strmh, 5000 );
-    }
+    for (auto &transfer : strmh->transfers)
+    {
+      transfer = std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter>(
+        libusb_alloc_transfer(0));
+      uint8_t *buf = (uint8_t *)malloc(strmh->cur_ctrl.dwMaxPayloadTransferSize);
+      
+      libusb_fill_bulk_transfer(
+        transfer.get(), strmh->devh->usb_devh,
+        format_desc->parent->bEndpointAddress, buf,
+        strmh->cur_ctrl.dwMaxPayloadTransferSize, _uvc_stream_callback,
+        ( void* ) strmh, 5000 );
+    }    
   }
 
   strmh->user_cb = cb;
@@ -1224,33 +1216,33 @@ uvc_error_t uvc_stream_start(
    * with the contents of each frame.
    */
   if (cb) {
-    pthread_create(&strmh->cb_thread, NULL, _uvc_user_caller, (void*) strmh);
+    strmh->callback_thread = std::thread(_uvc_user_caller, (void*) strmh);
   }
 
-  for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
-      transfer_id++) {
-    ret = libusb_submit_transfer(strmh->transfers[transfer_id]);
-    if (ret != UVC_SUCCESS) {
-      UVC_DEBUG("libusb_submit_transfer failed: %d",ret);
-      break;
+  {
+    auto it = std::begin(strmh->transfers);
+    for ( ; it != std::end(strmh->transfers); ++it) {
+      ret = libusb_submit_transfer(it->get());
+      if (ret != UVC_SUCCESS) {
+        UVC_DEBUG("libusb_submit_transfer failed: %d",ret);
+        break;
+      }
     }
-  }
 
-  if ( ret != UVC_SUCCESS && transfer_id > 0 ) {
-    for ( ; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; transfer_id++) {
-      free ( strmh->transfers[transfer_id]->buffer );
-      libusb_free_transfer ( strmh->transfers[transfer_id]);
-      strmh->transfers[transfer_id] = 0;
+    if ( ret != UVC_SUCCESS && it != std::begin(strmh->transfers) ) {
+      for ( ; it != std::end(strmh->transfers); ++it) {
+        it->reset();
+      }
+      ret = UVC_SUCCESS;
     }
-    ret = UVC_SUCCESS;
   }
 
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 fail:
   strmh->running = 0;
   UVC_EXIT(ret);
-  return ret;
+  return static_cast<uvc_error_t>(ret);
 }
 
 /** Begin streaming video from the stream into the callback function.
@@ -1283,21 +1275,18 @@ void *_uvc_user_caller(void *arg) {
   uint32_t last_seq = 0;
 
   do {
-    pthread_mutex_lock(&strmh->cb_mutex);
+    {
+      std::unique_lock<std::mutex> lock(strmh->callback_mutex);
 
-    while (strmh->running && last_seq == strmh->hold_seq) {
-      pthread_cond_wait(&strmh->cb_cond, &strmh->cb_mutex);
-    }
+      strmh->callback_cond.wait(lock, [&]{return !strmh->running || last_seq != strmh->hold_seq;});
 
-    if (!strmh->running) {
-      pthread_mutex_unlock(&strmh->cb_mutex);
-      break;
-    }
+      if (!strmh->running) {
+        break;
+      }
     
-    last_seq = strmh->hold_seq;
-    _uvc_populate_frame(strmh);
-    
-    pthread_mutex_unlock(&strmh->cb_mutex);
+      last_seq = strmh->hold_seq;
+      _uvc_populate_frame(strmh);
+    }    
     
     strmh->user_cb(&strmh->frame, strmh->user_ptr);
   } while(1);
@@ -1351,20 +1340,22 @@ void _uvc_populate_frame(uvc_stream_handle_t *strmh) {
   frame->capture_time_finished = strmh->capture_time_finished;
 
   /* copy the image data from the hold buffer to the frame (unnecessary extra buf?) */
-  if (frame->data_bytes < strmh->hold_bytes) {
-    frame->data = realloc(frame->data, strmh->hold_bytes);
+  auto sz = strmh->holdbuf.size();
+  if (frame->data_bytes < sz) {
+    frame->data = realloc(frame->data, sz);
   }
-  frame->data_bytes = strmh->hold_bytes;
-  memcpy(frame->data, strmh->holdbuf, frame->data_bytes);
+  frame->data_bytes = sz;
+  memcpy(frame->data, strmh->holdbuf.data(), sz);
 
-  if (strmh->meta_hold_bytes > 0)
+  if (!strmh->meta_holdbuf.empty())
   {
-      if (frame->metadata_bytes < strmh->meta_hold_bytes)
-      {
-          frame->metadata = realloc(frame->metadata, strmh->meta_hold_bytes);
-      }
-      frame->metadata_bytes = strmh->meta_hold_bytes;
-      memcpy(frame->metadata, strmh->meta_holdbuf, frame->metadata_bytes);
+    auto sz = strmh->meta_holdbuf.size();
+    if (frame->metadata_bytes < sz)
+    {
+      frame->metadata = realloc(frame->metadata, sz);
+    }
+    frame->metadata_bytes = sz;
+    memcpy(frame->metadata, strmh->meta_holdbuf.data(), sz);
   }
 }
 
@@ -1378,18 +1369,13 @@ void _uvc_populate_frame(uvc_stream_handle_t *strmh) {
 uvc_error_t uvc_stream_get_frame(uvc_stream_handle_t *strmh,
 			  uvc_frame_t **frame,
 			  int32_t timeout_us) {
-  time_t add_secs;
-  time_t add_nsecs;
-  struct timespec ts;
-  struct timeval tv;
-
   if (!strmh->running)
     return UVC_ERROR_INVALID_PARAM;
 
   if (strmh->user_cb)
     return UVC_ERROR_CALLBACK_EXISTS;
 
-  pthread_mutex_lock(&strmh->cb_mutex);
+  std::unique_lock<std::mutex> lock(strmh->callback_mutex);
 
   if (strmh->last_polled_seq < strmh->hold_seq) {
     _uvc_populate_frame(strmh);
@@ -1397,41 +1383,16 @@ uvc_error_t uvc_stream_get_frame(uvc_stream_handle_t *strmh,
     strmh->last_polled_seq = strmh->hold_seq;
   } else if (timeout_us != -1) {
     if (timeout_us == 0) {
-      pthread_cond_wait(&strmh->cb_cond, &strmh->cb_mutex);
+      strmh->callback_cond.wait(lock);
     } else {
-      add_secs = timeout_us / 1000000;
-      add_nsecs = (timeout_us % 1000000) * 1000;
-      ts.tv_sec = 0;
-      ts.tv_nsec = 0;
+      auto frame_ready = strmh->callback_cond.wait_for(
+        lock, std::chrono::microseconds(timeout_us),
+        [&]{return strmh->last_polled_seq < strmh->hold_seq;});
 
-#if _POSIX_TIMERS > 0
-      clock_gettime(CLOCK_REALTIME, &ts);
-#else
-      gettimeofday(&tv, NULL);
-      ts.tv_sec = tv.tv_sec;
-      ts.tv_nsec = tv.tv_usec * 1000;
-#endif
-
-      ts.tv_sec += add_secs;
-      ts.tv_nsec += add_nsecs;
-
-      /* pthread_cond_timedwait FAILS with EINVAL if ts.tv_nsec > 1000000000 (1 billion)
-       * Since we are just adding values to the timespec, we have to increment the seconds if nanoseconds is greater than 1 billion,
-       * and then re-adjust the nanoseconds in the correct range.
-       * */
-      ts.tv_sec += ts.tv_nsec / 1000000000;
-      ts.tv_nsec = ts.tv_nsec % 1000000000;
-
-      int err = pthread_cond_timedwait(&strmh->cb_cond, &strmh->cb_mutex, &ts);
-
-      //TODO: How should we handle EINVAL?
-      switch(err){
-      case EINVAL:
-          *frame = NULL;
-          return UVC_ERROR_OTHER;
-      case ETIMEDOUT:
-          *frame = NULL;
-          return UVC_ERROR_TIMEOUT;
+      if (!frame_ready)
+      {
+        *frame = NULL;
+        return UVC_ERROR_TIMEOUT;
       }
     }
     
@@ -1445,8 +1406,6 @@ uvc_error_t uvc_stream_get_frame(uvc_stream_handle_t *strmh,
   } else {
     *frame = NULL;
   }
-
-  pthread_mutex_unlock(&strmh->cb_mutex);
 
   return UVC_SUCCESS;
 }
@@ -1481,39 +1440,60 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
 
   strmh->running = 0;
 
-  pthread_mutex_lock(&strmh->cb_mutex);
+  {
+    std::unique_lock<std::mutex> lock(strmh->callback_mutex);
 
-  for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-    if(strmh->transfers[i] != NULL) {
-      int res = libusb_cancel_transfer(strmh->transfers[i]);
-      if(res < 0 && res != LIBUSB_ERROR_NOT_FOUND ) {
-        free(strmh->transfers[i]->buffer);
-        libusb_free_transfer(strmh->transfers[i]);
-        strmh->transfers[i] = NULL;
+#if 0
+    // Allow libusb callback function to reset() unique_ptr<libusb_transfer>
+    // objects instead of doing it here. Then below, we block until all
+    // unique_ptr<libusb_transfer>'s are reset.
+    // @todo Should there be a timeout in case transfers are not reset?
+    for (auto transfer : strmh->transfers)
+    {
+      if (transfer)
+      {
+        int res = libusb_cancel_transfer(transfer.get());
+        if(res < 0 && res != LIBUSB_ERROR_NOT_FOUND ) {
+          transfer.reset();
+        }        
       }
     }
+#endif    
+
+    /* Wait for transfers to complete/cancel */
+    UVC_DEBUG("WAITING FOR ALL TRANSFERS TO COMPLETE/CANCEL===================================================");
+    do {
+      int i = 0;
+      auto it = std::begin(strmh->transfers);
+      for ( ; it != std::end(strmh->transfers); ++it) {
+        auto &transfer = *it;
+        if (transfer)
+        {
+          UVC_DEBUG("transfer[%d] (%p)", i++, transfer.get());
+          break;
+        }
+        else
+        {
+          UVC_DEBUG("transfer[%d] ALREADY FREED", i++);
+        }
+      }
+      if (it == std::end(strmh->transfers))
+        break;
+      strmh->callback_cond.wait(lock);
+    } while(1);
   }
 
-  /* Wait for transfers to complete/cancel */
-  do {
-    for(i=0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) {
-      if(strmh->transfers[i] != NULL)
-        break;
-    }
-    if(i == LIBUVC_NUM_TRANSFER_BUFS )
-      break;
-    pthread_cond_wait(&strmh->cb_cond, &strmh->cb_mutex);
-  } while(1);
   // Kick the user thread awake
-  pthread_cond_broadcast(&strmh->cb_cond);
-  pthread_mutex_unlock(&strmh->cb_mutex);
+  strmh->callback_cond.notify_all();
 
   /** @todo stop the actual stream, camera side? */
 
   if (strmh->user_cb) {
     /* wait for the thread to stop (triggered by
      * LIBUSB_TRANSFER_CANCELLED transfer) */
-    pthread_join(strmh->cb_thread, NULL);
+    UVC_DEBUG("callback_thread joining");
+    strmh->callback_thread.join();
+    UVC_DEBUG("callback_thread joined");
   }
 
   return UVC_SUCCESS;
@@ -1535,15 +1515,6 @@ void uvc_stream_close(uvc_stream_handle_t *strmh) {
   if (strmh->frame.data)
     free(strmh->frame.data);
 
-  free(strmh->outbuf);
-  free(strmh->holdbuf);
-
-  free(strmh->meta_outbuf);
-  free(strmh->meta_holdbuf);
-
-  pthread_cond_destroy(&strmh->cb_cond);
-  pthread_mutex_destroy(&strmh->cb_mutex);
-
   DL_DELETE(strmh->devh->streams, strmh);
-  free(strmh);
+  delete strmh;
 }

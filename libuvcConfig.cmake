@@ -10,7 +10,7 @@ if(${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED)
   list(APPEND extraArgs REQUIRED)
 endif()
 
-find_package(JpegPkg ${extraArgs})
+find_package(JPEG ${extraArgs})
 find_package(LibUSB ${extraArgs})
 include("${CMAKE_CURRENT_LIST_DIR}/libuvcTargets.cmake")
 

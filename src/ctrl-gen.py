@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import print_function
 from collections import OrderedDict
 import getopt
@@ -84,7 +84,7 @@ GETTER_TEMPLATE = """/** @ingroup ctrl
  */
 uvc_error_t uvc_get_{control_name}(uvc_device_handle_t *devh, {args_signature}, enum uvc_req_code req_code) {{
   uint8_t data[{control_length}];
-  uvc_error_t ret;
+  int ret;
 
   ret = libusb_control_transfer(
     devh->usb_devh,
@@ -99,7 +99,7 @@ uvc_error_t uvc_get_{control_name}(uvc_device_handle_t *devh, {args_signature}, 
     {unpack}
     return UVC_SUCCESS;
   }} else {{
-    return ret;
+    return static_cast<uvc_error_t>(ret);
   }}
 }}
 """
@@ -111,7 +111,7 @@ SETTER_TEMPLATE = """/** @ingroup ctrl
  */
 uvc_error_t uvc_set_{control_name}(uvc_device_handle_t *devh, {args_signature}) {{
   uint8_t data[{control_length}];
-  uvc_error_t ret;
+  int ret;
 
   {pack}
 
@@ -127,7 +127,7 @@ uvc_error_t uvc_set_{control_name}(uvc_device_handle_t *devh, {args_signature}) 
   if (ret == sizeof(data))
     return UVC_SUCCESS;
   else
-    return ret;
+    return static_cast<uvc_error_t>(ret);
 }}
 """
 
@@ -274,11 +274,11 @@ if __name__ == '__main__':
         for input_file in inputs:
             with open(input_file, "r") as fp:
                 units = yaml.load(fp)['units']
-                for unit_name, unit_details in units.iteritems():
+                for unit_name, unit_details in units.items():
                     yield unit_name, unit_details
 
     if mode == 'def':
-        print("""/* This is an AUTO-GENERATED file! Update it with the output of `ctrl-gen.py def`. */
+        print("""/* This is an AUTO-GENERATED file! Update it with the output of `./ctrl-gen.py --input ../standard-units.yaml def > ctrl-gen.cpp`. */
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
 
@@ -297,6 +297,6 @@ static const int REQ_TYPE_GET = 0xa1;
         sys.exit(0)
 
     for unit_name, unit_details in iterunits():
-        for control_name, control_details in unit_details['controls'].iteritems():
+        for control_name, control_details in unit_details['controls'].items():
             code = fun(unit_name, unit_details, control_name, control_details)
             print(code)

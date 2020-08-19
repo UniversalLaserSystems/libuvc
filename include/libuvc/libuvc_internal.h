@@ -5,13 +5,17 @@
 #ifndef LIBUVC_INTERNAL_H
 #define LIBUVC_INTERNAL_H
 
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <pthread.h>
-#include <signal.h>
-#include <libusb.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <vector>
+#pragma warning (disable:4200)
+#include <libusb-1.0/libusb.h>
+#pragma warning (default:4200)
 #include "utlist.h"
 
 /** Converts an unaligned four-byte little-endian integer into an int32 */
@@ -49,22 +53,16 @@
   } while (0);
 
 #ifdef UVC_DEBUGGING
-#include <libgen.h>
-#define UVC_DEBUG(format, ...) fprintf(stderr, "[%s:%d/%s] " format "\n", basename(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__)
-#define UVC_ENTER() fprintf(stderr, "[%s:%d] begin %s\n", basename(__FILE__), __LINE__, __FUNCTION__)
-#define UVC_EXIT(code) fprintf(stderr, "[%s:%d] end %s (%d)\n", basename(__FILE__), __LINE__, __FUNCTION__, code)
-#define UVC_EXIT_VOID() fprintf(stderr, "[%s:%d] end %s\n", basename(__FILE__), __LINE__, __FUNCTION__)
+#define UVC_DEBUG(format, ...) fprintf(stderr, "[%s:%d/%s] " format "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#define UVC_ENTER() fprintf(stderr, "[%s:%d] begin %s\n", __FILE__, __LINE__, __func__)
+#define UVC_EXIT(code) fprintf(stderr, "[%s:%d] end %s (%d)\n", __FILE__, __LINE__, __func__, code)
+#define UVC_EXIT_VOID() fprintf(stderr, "[%s:%d] end %s\n", __FILE__, __LINE__, __func__)
 #else
 #define UVC_DEBUG(format, ...)
 #define UVC_ENTER()
 #define UVC_EXIT_VOID()
 #define UVC_EXIT(code)
 #endif
-
-/* http://stackoverflow.com/questions/19452971/array-size-macro-that-rejects-pointers */
-#define IS_INDEXABLE(arg) (sizeof(arg[0]))
-#define IS_ARRAY(arg) (IS_INDEXABLE(arg) && (((void *) &arg) == ((void *) arg)))
-#define ARRAYSIZE(arr) (sizeof(arr) / (IS_ARRAY(arr) ? sizeof(arr[0]) : 0))
 
 /** Video interface subclass code (A.2) */
 enum uvc_int_subclass_code {
@@ -196,6 +194,12 @@ struct uvc_device {
   struct uvc_context *ctx;
   int ref;
   libusb_device *usb_dev;
+
+  uvc_device()
+    : ctx(nullptr)
+    , ref(0)
+    , usb_dev(0) {
+  }
 };
 
 typedef struct uvc_device_info {
@@ -207,18 +211,22 @@ typedef struct uvc_device_info {
   uvc_streaming_interface_t *stream_ifs;
 } uvc_device_info_t;
 
-/*
-  set a high number of transfer buffers. This uses a lot of ram, but
-  avoids problems with scheduling delays on slow boards causing missed
-  transfers. A better approach may be to make the transfer thread FIFO
-  scheduled (if we have root).
-  We could/should change this to allow reduce it to, say, 5 by default
-  and then allow the user to change the number of buffers as required.
- */
-#define LIBUVC_NUM_TRANSFER_BUFS 100
+struct uvc_stream_config_t {
+  size_t number_of_transport_buffers;
+  size_t size_of_transport_buffer;
+  size_t size_of_meta_transport_buffer;
+};
 
-#define LIBUVC_XFER_BUF_SIZE	( 16 * 1024 * 1024 )
-#define LIBUVC_XFER_META_BUF_SIZE ( 4 * 1024 )
+extern uvc_stream_config_t uvc_stream_config;
+
+struct libusb_transfer_deleter {
+  void operator()(struct libusb_transfer* t) {
+    free(t->buffer);
+    libusb_free_transfer(t);
+  }
+};
+
+typedef std::unique_ptr<struct libusb_transfer, struct libusb_transfer_deleter> unique_ptr_libusb_transfer;
 
 struct uvc_stream_handle {
   struct uvc_device_handle *devh;
@@ -231,28 +239,72 @@ struct uvc_stream_handle {
   struct uvc_stream_ctrl cur_ctrl;
 
   /* listeners may only access hold*, and only when holding a
-   * lock on cb_mutex (probably signaled with cb_cond) */
+   * lock on cb_mutex (probably signaled with cb_cond)
+   *
+   * The struct libusb_transfer* callback (_uvc_stream_callback) copies bytes
+   * to uint8_t *outbuf. When outbuf contains a full frame (determined by EOF
+   * bit), the contents of oubuf are copied to uint8_t *holdbuf and
+   * callback_cond is notified. The waiting _uvc_user_caller() thread then
+   * calls the user's callback function with the completed frame.
+   */
+  
   uint8_t fid;
   uint32_t seq, hold_seq;
   uint32_t pts, hold_pts;
   uint32_t last_scr, hold_last_scr;
-  size_t got_bytes, hold_bytes;
-  uint8_t *outbuf, *holdbuf;
-  pthread_mutex_t cb_mutex;
-  pthread_cond_t cb_cond;
-  pthread_t cb_thread;
+  std::vector<uint8_t> outbuf;
+  std::vector<uint8_t> holdbuf;
+  std::mutex callback_mutex;
+  std::condition_variable callback_cond;
+  std::thread callback_thread;
   uint32_t last_polled_seq;
   uvc_frame_callback_t *user_cb;
   void *user_ptr;
-  struct libusb_transfer *transfers[LIBUVC_NUM_TRANSFER_BUFS];
-  uint8_t *transfer_bufs[LIBUVC_NUM_TRANSFER_BUFS];
+  /*
+   * Each transfer is a unique_ptr<libusb_transfer> whose underlying raw pointer
+   * is managed by libusb_alloc_transfer/libusb_free_transfer. The
+   * libusb_transfer also has a buffer member that we are responsible for
+   * freeing which is done by the custom deleter, libusb_transfer_deleter.
+   */
+  std::vector<std::unique_ptr<struct libusb_transfer, libusb_transfer_deleter> > transfers;
   struct uvc_frame frame;
   enum uvc_frame_format frame_format;
-  struct timespec capture_time_finished;
-
+  std::chrono::steady_clock::time_point capture_time_finished;
   /* raw metadata buffer if available */
-  uint8_t *meta_outbuf, *meta_holdbuf;
-  size_t meta_got_bytes, meta_hold_bytes;
+  std::vector<uint8_t> meta_outbuf;
+  std::vector<uint8_t> meta_holdbuf;
+
+  uvc_stream_handle()
+    : devh(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , stream_if(nullptr)
+    , running(0)
+    //, cur_ctrl default constructed
+    , fid(0)
+    , seq(0)
+    , hold_seq(0)
+    , pts(0)
+    , hold_pts(0)
+    , last_scr(0)
+    , hold_last_scr(0)
+    , last_polled_seq(0)
+    , user_cb(nullptr)
+    , user_ptr(nullptr)
+    , transfers(uvc_stream_config.number_of_transport_buffers)
+    //, frame default constructed
+    , frame_format(UVC_FRAME_FORMAT_UNKNOWN)
+    //, capture_time_finished default constructed
+  {
+    /** @todo take only what we need */
+    outbuf.reserve(uvc_stream_config.size_of_transport_buffer);
+    holdbuf.reserve(uvc_stream_config.size_of_transport_buffer);
+    meta_outbuf.reserve(uvc_stream_config.size_of_meta_transport_buffer);
+    meta_holdbuf.reserve(uvc_stream_config.size_of_meta_transport_buffer);
+  }
+
+  ~uvc_stream_handle() {
+  }
 };
 
 /** Handle on an open UVC device
@@ -278,6 +330,31 @@ struct uvc_device_handle {
   /** Whether the camera is an iSight that sends one header per frame */
   uint8_t is_isight;
   uint32_t claimed;
+
+  uvc_device_handle()
+    : dev(nullptr)
+    , prev(nullptr)
+    , next(nullptr)
+    , usb_devh(nullptr)
+    , info(nullptr)
+    , status_xfer(nullptr)
+    //, status_buf
+    , status_cb(nullptr)
+    , status_user_ptr(nullptr)
+    , button_cb(nullptr)
+    , button_user_ptr(nullptr)
+    , streams(nullptr)
+    , is_isight(0)
+    , claimed(0) {
+    memset(status_buf, 0, sizeof(status_buf));
+  }
+  ~uvc_device_handle() {
+    if (info)
+      delete info;
+
+    if (status_xfer)
+      libusb_free_transfer(status_xfer);
+  }
 };
 
 /** Context within which we communicate with devices */
@@ -288,8 +365,16 @@ struct uvc_context {
   uint8_t own_usb_ctx;
   /** List of open devices in this context */
   uvc_device_handle_t *open_devices;
-  pthread_t handler_thread;
+  std::thread handler_thread;
   int kill_handler_thread;
+
+  uvc_context()
+    : usb_ctx(nullptr)
+    , own_usb_ctx(0)
+    , open_devices(nullptr)
+    //, handler_thread default constructed
+    , kill_handler_thread(0) {
+  }
 };
 
 uvc_error_t uvc_query_stream_ctrl(

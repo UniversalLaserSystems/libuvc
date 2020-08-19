@@ -1,10 +1,21 @@
 cmake_minimum_required(VERSION 3.1)
 project(libuvc
   VERSION 0.0.6
-  LANGUAGES C
+  LANGUAGES CXX
 )
 
-# Additional search scripts path for libusb-1.0, libjpeg, OpenCV
+# [----------------------------------------------------------------------------
+include(CMakePrintHelpers)
+
+# CMP0074: find_package uses <PackageName>_ROOT variables
+if(POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
+endif()
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+endif()
+# ----------------------------------------------------------------------------]
+
+# Additional search scripts path for libusb-1.0
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 # Xcode and Visual Studio do not using CMAKE_BUILD_TYPE cache variable
@@ -29,27 +40,32 @@ set(libuvc_DESCRIPTION "A cross-platform library for USB video devices")
 set(libuvc_URL "https://github.com/libuvc/libuvc")
 
 set(SOURCES 
-  src/ctrl.c
-  src/ctrl-gen.c
-  src/device.c
-  src/diag.c
-  src/frame.c
-  src/init.c
-  src/stream.c
-  src/misc.c
+  src/ctrl.cpp
+  src/ctrl-gen.cpp
+  src/device.cpp
+  src/diag.cpp
+  src/frame.cpp
+  src/init.cpp
+  src/stream.cpp
 )
 
 find_package(LibUSB)
 
-# JpegPkg name to differ from shipped with CMake
-find_package(JpegPkg QUIET)
+find_package(JPEG QUIET)
 if(JPEG_FOUND)
   message(STATUS "Building libuvc with JPEG support.")
   set(LIBUVC_HAS_JPEG TRUE)
-  list(APPEND SOURCES src/frame-mjpeg.c)
+  list(APPEND SOURCES src/frame-mjpeg.cpp)
 else()
   message(WARNING "JPEG not found. libuvc will not support JPEG decoding.")
 endif()
+
+# [-----------------------------------------------------------------------------
+cmake_print_properties(TARGETS LibUSB::LibUSB
+                       PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION)
+cmake_print_properties(TARGETS JPEG::JPEG
+                       PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION IMPORTED_LOCATION_RELEASE IMPORTED_LOCATION_DEBUG)
+# -----------------------------------------------------------------------------]
 
 if(${CMAKE_BUILD_TARGET} MATCHES "Shared")
   set(BUILD_UVC_SHARED TRUE)
@@ -69,6 +85,7 @@ if(BUILD_UVC_SHARED)
     SOVERSION ${libuvc_VERSION_MAJOR}
     # Exported name of target within namespace LibUVC
     EXPORT_NAME UVCShared
+    LINKER_LANGUAGE CXX
   )
   list(APPEND UVC_TARGETS uvc)
   if(NOT LibUVC_STATIC)  
@@ -85,6 +102,7 @@ if(BUILD_UVC_STATIC)
     OUTPUT_NAME uvc
     # Exported name of target within namespace LibUVC
     EXPORT_NAME UVCStatic
+    LINKER_LANGUAGE CXX
   )
   list(APPEND UVC_TARGETS uvc_static)
   add_library(LibUVC::UVCStatic ALIAS uvc_static)
@@ -128,25 +146,45 @@ foreach(target_name IN LISTS UVC_TARGETS)
 endforeach()
 
 if(BUILD_EXAMPLE)
-  add_executable(example src/example.c)
+  add_executable(example src/example.cpp)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set_target_properties(example PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMT")
+  endif()
   find_package(Threads)
+  find_package(OpenCV REQUIRED
+      core
+      highgui
+    PATHS
+      ${OpenCV_ROOT}
+  )
   target_link_libraries(example
     PRIVATE
-      LibUVC::UVC
+      uvc_static
+      LibUSB::LibUSB
       Threads::Threads
+      opencv_core
+      opencv_highgui
   )
 endif()
 
 if(BUILD_TEST)
   # OpenCV defines targets with transitive dependencies not with namespaces but using opencv_ prefix. 
   # This targets provide necessary include directories and linked flags.
-  find_package(OpenCVPkg REQUIRED
+  find_package(OpenCV REQUIRED
     COMPONENTS
-      opencv_core
-      opencv_highgui
+      core
+      highgui
+    PATHS
+      ${OpenCV_ROOT}
   )
 
-  add_executable(uvc_test src/test.c)
+  add_executable(uvc_test
+    src/test.cpp
+    $<$<BOOL:${JPEG_FOUND}>:src/frame-mjpeg.cpp>
+  )
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set_target_properties(uvc_test PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMT")
+  endif()
   target_link_libraries(uvc_test
     PRIVATE
       LibUVC::UVC
@@ -177,7 +215,6 @@ install(EXPORT libuvcTargets
 
 install(FILES 
     cmake/FindLibUSB.cmake
-    cmake/FindJpegPkg.cmake
   DESTINATION ${CMAKE_INSTALL_CMAKEDIR}
 )
 
@@ -212,3 +249,15 @@ install(FILES libuvcConfig.cmake
 )
 
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  string(REGEX REPLACE "[.]lib" ".dll" LibUSB_DLL ${LibUSB_LIBRARY})
+  cmake_print_variables(LibUSB_LIBRARY LibUSB_DLL CMAKE_BINARY_DIR)
+  add_custom_command(TARGET example POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${LibUSB_LIBRARY} ${CMAKE_BINARY_DIR}/$<CONFIG>
+    COMMAND ${CMAKE_COMMAND} -E copy ${LibUSB_DLL}     ${CMAKE_BINARY_DIR}/$<CONFIG>
+    )
+  install (
+    FILES ${LibUSB_LIBRARY} ${LibUSB_DLL}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+endif()
