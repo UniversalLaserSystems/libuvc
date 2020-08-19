@@ -210,6 +210,7 @@ void Camera::LibuvcCallback(uvc_frame_t *frame, void *ptr) {
   
   std::string filename = ss.str();
   cv::imwrite(filename, toBgr);
+  printf("Created file \"%s\"\n", filename.c_str());
 #else
   cv::namedWindow("Test", cv::WINDOW_NORMAL);
   cv::resizeWindow("Test", 1920, 1080);

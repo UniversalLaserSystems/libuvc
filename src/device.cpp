@@ -309,6 +309,7 @@ uvc_error_t uvc_open(
 
   if (internal_devh->info->ctrl_if.bEndpointAddress) {
     internal_devh->status_xfer = libusb_alloc_transfer(0);
+    UVC_DEBUG("libusb_alloc_transfer status_xfer %p", internal_devh->status_xfer);
     if (!internal_devh->status_xfer) {
       ret = UVC_ERROR_NO_MEM;
       goto fail;
@@ -1605,6 +1606,17 @@ void uvc_close(uvc_device_handle_t *devh) {
   if (devh->streams)
     uvc_stop_streaming(devh);
 
+  if (devh->status_xfer)
+  {
+    UVC_DEBUG("WAITING FOR STATUS TRANSFER TO CANCEL===================================================");
+    libusb_cancel_transfer(devh->status_xfer);
+    while (devh->status_xfer)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    UVC_DEBUG("STATUS TRANSFER TO CANCELED=============================================================");
+  }
+
   uvc_release_if(devh, devh->info->ctrl_if.bInterfaceNumber);
 
   /* If we are managing the libusb context and this is the last open device,
@@ -1794,6 +1806,11 @@ void LIBUSB_CALL _uvc_status_callback(struct libusb_transfer *transfer) {
   case LIBUSB_TRANSFER_CANCELLED:
   case LIBUSB_TRANSFER_NO_DEVICE:
     UVC_DEBUG("not processing/resubmitting, status = %d", transfer->status);
+    if (transfer == devh->status_xfer)
+    {
+      libusb_free_transfer(devh->status_xfer);
+      devh->status_xfer = nullptr;
+    }
     UVC_EXIT_VOID();
     return;
   case LIBUSB_TRANSFER_COMPLETED:
