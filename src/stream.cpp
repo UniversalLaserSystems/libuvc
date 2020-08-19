@@ -637,9 +637,9 @@ void _uvc_swap_buffers(uvc_stream_handle_t *strmh) {
   /* clear the buffers, but re-reserve capacity (the C++ standard does not
    * guarantee the capacity stays the same after a clear). */
   strmh->outbuf.clear();
-  strmh->outbuf.reserve(LIBUVC_XFER_BUF_SIZE);
+  strmh->outbuf.reserve(uvc_stream_config.size_of_transport_buffer);
   strmh->meta_outbuf.clear();
-  strmh->meta_outbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
+  strmh->meta_outbuf.reserve(uvc_stream_config.size_of_meta_transport_buffer);
   strmh->seq++;
   strmh->last_scr = 0;
   strmh->pts = 0;
@@ -963,6 +963,22 @@ static uvc_streaming_interface_t *_uvc_get_stream_if(uvc_device_handle_t *devh, 
   }
   
   return NULL;
+}
+
+struct uvc_stream_config_t uvc_stream_config = {
+  20, // number_of_transport_buffers
+  8 * 1024 * 1024, // size_of_transport_buffer
+  4 * 1024 // size_of_meta_transport_buffer
+};
+
+void uvc_stream_set_default_number_of_transport_buffers(size_t s) {
+  uvc_stream_config.number_of_transport_buffers = s;
+}
+void uvc_stream_set_default_size_of_transport_buffer(size_t s) {
+  uvc_stream_config.size_of_transport_buffer = s;
+}
+void uvc_stream_set_default_size_of_meta_transport_buffer(size_t s) {
+  uvc_stream_config.size_of_meta_transport_buffer = s;
 }
 
 /** Open a new video stream.
@@ -1445,11 +1461,21 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
 #endif    
 
     /* Wait for transfers to complete/cancel */
+    UVC_DEBUG("WAITING FOR ALL TRANSFERS TO COMPLETE/CANCEL===================================================");
     do {
+      int i = 0;
       auto it = std::begin(strmh->transfers);
       for ( ; it != std::end(strmh->transfers); ++it) {
-        if (*it)
+        auto &transfer = *it;
+        if (transfer)
+        {
+          UVC_DEBUG("transfer[%d] (%p)", i++, transfer.get());
           break;
+        }
+        else
+        {
+          UVC_DEBUG("transfer[%d] ALREADY FREED", i++);
+        }
       }
       if (it == std::end(strmh->transfers))
         break;

@@ -211,18 +211,13 @@ typedef struct uvc_device_info {
   uvc_streaming_interface_t *stream_ifs;
 } uvc_device_info_t;
 
-/*
-  set a high number of transfer buffers. This uses a lot of ram, but
-  avoids problems with scheduling delays on slow boards causing missed
-  transfers. A better approach may be to make the transfer thread FIFO
-  scheduled (if we have root).
-  We could/should change this to allow reduce it to, say, 5 by default
-  and then allow the user to change the number of buffers as required.
- */
-#define LIBUVC_NUM_TRANSFER_BUFS 100
+struct uvc_stream_config_t {
+  size_t number_of_transport_buffers;
+  size_t size_of_transport_buffer;
+  size_t size_of_meta_transport_buffer;
+};
 
-#define LIBUVC_XFER_BUF_SIZE	( 16 * 1024 * 1024 )
-#define LIBUVC_XFER_META_BUF_SIZE ( 4 * 1024 )
+extern uvc_stream_config_t uvc_stream_config;
 
 struct libusb_transfer_deleter {
   void operator()(struct libusb_transfer* t) {
@@ -296,16 +291,16 @@ struct uvc_stream_handle {
     , last_polled_seq(0)
     , user_cb(nullptr)
     , user_ptr(nullptr)
-    , transfers(LIBUVC_NUM_TRANSFER_BUFS)
+    , transfers(uvc_stream_config.number_of_transport_buffers)
     //, frame default constructed
     , frame_format(UVC_FRAME_FORMAT_UNKNOWN)
     //, capture_time_finished default constructed
   {
     /** @todo take only what we need */
-    outbuf.reserve(LIBUVC_XFER_BUF_SIZE);
-    holdbuf.reserve(LIBUVC_XFER_BUF_SIZE);
-    meta_outbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
-    meta_holdbuf.reserve(LIBUVC_XFER_META_BUF_SIZE);
+    outbuf.reserve(uvc_stream_config.size_of_transport_buffer);
+    holdbuf.reserve(uvc_stream_config.size_of_transport_buffer);
+    meta_outbuf.reserve(uvc_stream_config.size_of_meta_transport_buffer);
+    meta_holdbuf.reserve(uvc_stream_config.size_of_meta_transport_buffer);
   }
 
   ~uvc_stream_handle() {
