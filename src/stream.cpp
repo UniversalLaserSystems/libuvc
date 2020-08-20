@@ -209,7 +209,7 @@ uvc_error_t uvc_query_stream_ctrl(
       req,
       probe ? (UVC_VS_PROBE_CONTROL << 8) : (UVC_VS_COMMIT_CONTROL << 8),
       ctrl->bInterfaceNumber,
-      buf, len, 0
+      buf, static_cast<uint16_t>(len), 0
   );
 
   if (err <= 0) {
@@ -618,10 +618,12 @@ uvc_error_t uvc_probe_still_ctrl(
  * @brief Swap the working buffer with the presented buffer and notify consumers
  */
 void _uvc_swap_buffers(uvc_stream_handle_t *strmh) {
-  uint8_t *tmp_buf;
   {
     std::lock_guard<std::mutex> lock(strmh->callback_mutex);
     strmh->capture_time_finished = std::chrono::steady_clock::now();
+
+    // std::swap does not perform memcpy's; it just swaps the underlying
+    // pointers
 
     /* swap the buffers */
     std::swap(strmh->outbuf, strmh->holdbuf);
@@ -634,8 +636,11 @@ void _uvc_swap_buffers(uvc_stream_handle_t *strmh) {
   }
   strmh->callback_cond.notify_all();
 
-  /* clear the buffers, but re-reserve capacity (the C++ standard does not
-   * guarantee the capacity stays the same after a clear). */
+  // Clear the buffers used to accumulate the next frame. We want the size
+  // to be 0 but the capacity to remain the same, however the C++ standard
+  // doesn't guarantee the capacity won't change. Do a reserve() to
+  // ensure the buffer is the size we need. Hopefully it's just a noop on
+  // your compiler.
   strmh->outbuf.clear();
   strmh->outbuf.reserve(uvc_stream_config.size_of_transport_buffer);
   strmh->meta_outbuf.clear();
@@ -794,8 +799,7 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
     break;
   case LIBUSB_TRANSFER_CANCELLED: 
   case LIBUSB_TRANSFER_ERROR:
-  case LIBUSB_TRANSFER_NO_DEVICE: {
-    int i;
+  case LIBUSB_TRANSFER_NO_DEVICE:
     UVC_DEBUG("not retrying transfer, status = %d", transfer->status);
     {
       std::lock_guard<std::mutex> lock(strmh->callback_mutex);
@@ -823,7 +827,6 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
     }
     strmh->callback_cond.notify_all();
     break;
-  }
   case LIBUSB_TRANSFER_TIMED_OUT:
   case LIBUSB_TRANSFER_STALL:
   case LIBUSB_TRANSFER_OVERFLOW:
@@ -1065,7 +1068,6 @@ uvc_error_t uvc_stream_start(
   int ret;
   /* Total amount of data per transfer */
   size_t total_transfer_size = 0;
-  int transfer_id;
 
   ctrl = &strmh->cur_ctrl;
 
@@ -1433,8 +1435,6 @@ void uvc_stop_streaming(uvc_device_handle_t *devh) {
  * @param devh UVC device
  */
 uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
-  int i;
-
   if (!strmh->running)
     return UVC_ERROR_INVALID_PARAM;
 
@@ -1443,24 +1443,11 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
   {
     std::unique_lock<std::mutex> lock(strmh->callback_mutex);
 
-#if 0
-    // Allow libusb callback function to reset() unique_ptr<libusb_transfer>
-    // objects instead of doing it here. Then below, we block until all
-    // unique_ptr<libusb_transfer>'s are reset.
-    // @todo Should there be a timeout in case transfers are not reset?
-    for (auto transfer : strmh->transfers)
-    {
-      if (transfer)
-      {
-        int res = libusb_cancel_transfer(transfer.get());
-        if(res < 0 && res != LIBUSB_ERROR_NOT_FOUND ) {
-          transfer.reset();
-        }        
-      }
-    }
-#endif    
+    // Wait for all transfers to complete/cancel
+    // The transfer callback resets a unique_ptr to indicate it has been
+    // cancelled.
 
-    /* Wait for transfers to complete/cancel */
+    /** @todo: add a timeout */
     UVC_DEBUG("WAITING FOR ALL TRANSFERS TO COMPLETE/CANCEL===================================================");
     do {
       int i = 0;

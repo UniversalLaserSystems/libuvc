@@ -486,6 +486,9 @@ void uvc_free_device_info(uvc_device_info_t *info) {
  * @param[out] desc Descriptor structure
  * @return Error if unable to fetch information, else SUCCESS
  */
+#if _WIN32
+#define strdup _strdup
+#endif
 uvc_error_t uvc_get_device_descriptor(
     uvc_device_t *dev,
     uvc_device_descriptor_t **desc) {
@@ -539,6 +542,9 @@ uvc_error_t uvc_get_device_descriptor(
   UVC_EXIT(ret);
   return static_cast<uvc_error_t>(ret);
 }
+#if _WIN32
+#undef strdup
+#endif
 
 /**
  * @brief Frees a device descriptor created with uvc_get_device_descriptor

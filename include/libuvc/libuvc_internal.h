@@ -23,14 +23,14 @@
 /** Converts an unaligned two-byte little-endian integer into an int16 */
 #define SW_TO_SHORT(p) ((p)[0] | ((p)[1] << 8))
 /** Converts an int16 into an unaligned two-byte little-endian integer */
-#define SHORT_TO_SW(s, p) \
-  (p)[0] = (s); \
-  (p)[1] = (s) >> 8;
+#define SHORT_TO_SW(s, p)                       \
+  (p)[0] = (uint8_t)((s) >> 0);                 \
+  (p)[1] = (uint8_t)((s) >> 8);
 /** Converts an int32 into an unaligned four-byte little-endian integer */
-#define INT_TO_DW(i, p) \
-  (p)[0] = (i); \
-  (p)[1] = (i) >> 8; \
-  (p)[2] = (i) >> 16; \
+#define INT_TO_DW(i, p)                         \
+  (p)[0] = (i);                                 \
+  (p)[1] = (i) >> 8;                            \
+  (p)[2] = (i) >> 16;                           \
   (p)[3] = (i) >> 24;
 
 /** Selects the nth item in a doubly linked list. n=-1 selects the last item. */
