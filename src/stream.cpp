@@ -40,6 +40,7 @@
 #include "libuvc/libuvc_internal.h"
 #include "errno.h"
 #include <algorithm>
+#include <iterator>
 #include <memory>
 
 uvc_frame_desc_t *uvc_find_frame_desc_stream(uvc_stream_handle_t *strmh,
