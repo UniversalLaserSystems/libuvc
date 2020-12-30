@@ -815,7 +815,6 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
       if (it != std::end(strmh->transfers))
       {
         // Delete managed object
-        // TODO: Do I need to check *it (operator bool) first?
         UVC_DEBUG("Freeing transfer (%p)", transfer);
         it->reset();
       }
@@ -853,7 +852,6 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
             });
           if (it != std::end(strmh->transfers))
           {
-            // TODO: Do I need to check *it (operator bool) first?
             UVC_DEBUG("Freeing failed transfer (%p)", transfer);
             it->reset();
           }
@@ -878,7 +876,6 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
           });
         if (it != std::end(strmh->transfers))
         {
-          // TODO: Do I need to check *it (operator bool) first?
           UVC_DEBUG("Freeing orphan transfer (%p)", transfer);
           it->reset();
         }
@@ -1448,7 +1445,8 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
     // The transfer callback resets a unique_ptr to indicate it has been
     // cancelled.
 
-    /** @todo: add a timeout */
+    const auto timeout = std::chrono::seconds(5);
+    const auto start_time = std::chrono::steady_clock::now();
     UVC_DEBUG("WAITING FOR ALL TRANSFERS TO COMPLETE/CANCEL===================================================");
     do {
       int i = 0;
@@ -1466,8 +1464,16 @@ uvc_error_t uvc_stream_stop(uvc_stream_handle_t *strmh) {
         }
       }
       if (it == std::end(strmh->transfers))
+      {
+        UVC_DEBUG("ALL TRANSFERS FREED");
         break;
-      strmh->callback_cond.wait(lock);
+      }
+      if (std::chrono::steady_clock::now() > start_time + timeout)
+      {
+        UVC_DEBUG("TIMED OUT WAITING TO FREE TRANSFERS AFTER %d SECONDS", timeout.count());
+        break;
+      }
+      strmh->callback_cond.wait_for(lock, std::chrono::seconds(1));
     } while(1);
   }
 
