@@ -17,7 +17,7 @@ LibUSB_ROOT
 if (NOT TARGET LibUSB::LibUSB)
   find_package(PkgConfig)
   if (PKG_CONFIG_FOUND)
-    pkg_check_modules(LibUSB REQUIRED
+    pkg_check_modules(LibUSB
       libusb-1.0
     )
   endif()
