@@ -63,7 +63,7 @@ else()
 endif()
 
 # [-----------------------------------------------------------------------------
-cmake_print_properties(TARGETS LibUSB::LibUSB
+cmake_print_properties(TARGETS libusb::libusb
                        PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION)
 cmake_print_properties(TARGETS JPEG::JPEG
                        PROPERTIES INTERFACE_INCLUDE_DIRECTORIES IMPORTED_LOCATION IMPORTED_LOCATION_RELEASE IMPORTED_LOCATION_DEBUG)
@@ -129,7 +129,7 @@ foreach(target_name IN LISTS UVC_TARGETS)
   )
   target_link_libraries(${target_name}
     # libusb-1.0 used internally so we link to it privately.
-    PRIVATE LibUSB::LibUSB
+    PRIVATE libusb::libusb
   )
   if(JPEG_FOUND)
     target_link_libraries(${target_name}
@@ -162,7 +162,7 @@ if(BUILD_EXAMPLE)
   target_link_libraries(example
     PRIVATE
       uvc_static
-      LibUSB::LibUSB
+      libusb::libusb
       Threads::Threads
       opencv_core
       opencv_highgui
