@@ -14,7 +14,8 @@ LibUSB_ROOT
 
 # TODO Append parts for Version compasion and REQUIRED support
 
-cmake_print_variables(CMAKE_PREFIX_PATH)
+message(STATUS "Entered FindLibUSB.cmake")
+cmake_print_variables(CMAKE_PREFIX_PATH CMAKE_LIBRARY_PATH CMAKE_INCLUDE_PATH)
 
 if (NOT TARGET LibUSB::LibUSB)
   find_package(PkgConfig)

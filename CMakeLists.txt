@@ -49,7 +49,9 @@ set(SOURCES
   src/stream.cpp
 )
 
+message(STATUS "Calling find_package(LibUSB)")
 find_package(LibUSB)
+message(STATUS "Returned from find_package(LibUSB)")
 
 find_package(JPEG QUIET)
 if(JPEG_FOUND)
