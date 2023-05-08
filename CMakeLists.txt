@@ -252,16 +252,14 @@ install(FILES libuvcConfig.cmake
 
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  string(REGEX REPLACE "[.]lib" ".dll" LibUSB_DLL ${LibUSB_LIBRARY})
-  cmake_print_variables(LibUSB_LIBRARY LibUSB_DLL CMAKE_BINARY_DIR)
+  cmake_print_variables(LibUSB_LIBRARY CMAKE_BINARY_DIR)
   if(BUILD_EXAMPLE)
     add_custom_command(TARGET example POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy ${LibUSB_LIBRARY} ${CMAKE_BINARY_DIR}/$<CONFIG>
-      COMMAND ${CMAKE_COMMAND} -E copy ${LibUSB_DLL}     ${CMAKE_BINARY_DIR}/$<CONFIG>
       )
   endif()
   install (
-    FILES ${LibUSB_LIBRARY} ${LibUSB_DLL}
+    FILES ${LibUSB_LIBRARY}
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     )
 endif()
