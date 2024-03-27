@@ -403,9 +403,9 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
     && !internal_info->config->interface[1].altsetting[0].extra)
   {
     internal_info->config->interface[1].altsetting[0].extra
-      = internal_info->config->interface[1].altsetting[0].endpoint.extra;
+      = internal_info->config->interface[1].altsetting[0].endpoint[0].extra;
     internal_info->config.interface[1]->altsetting[0].extra_length
-      = internal_info->config->interface[1].altsetting[0].endpoint.extra_length;
+      = internal_info->config->interface[1].altsetting[0].endpoint[0].extra_length;
   }
 
   ret = uvc_scan_control(dev, internal_info);
