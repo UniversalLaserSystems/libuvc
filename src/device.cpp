@@ -388,6 +388,26 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
     return UVC_ERROR_IO;
   }
 
+  // The ELP 16MP camera incorrectly publishes its VideoStreaming Interface Descriptors under an
+  // endpoint instead of under the top-level interface descriptor for interface 1.  Copy the
+  // corresponding binary blob ("extra") from the endpoint's storage to the interface descriptor's
+  // storage.
+  uvc_device_descriptor_t *uvcDeviceDescriptor;
+  ret = uvc_get_device_descriptor(dev, &uvcDeviceDescriptor);
+  if (ret == UVC_SUCCESS
+    && uvcDeviceDescriptor->idVendor == 0x32e4
+    && uvcDeviceDescriptor->idProduct == 0x1298
+    && internal_info->config.altsetting[0].endpoint
+    && internal_info->config.altsetting[0].endpoint[0].extra
+    && internal_info->config.num_interfaces >= 2
+    && !internal_info->config.interface[1].altsetting[0].extra)
+  {
+    internal_info->config.interface[1].altsetting[0].extra
+      = internal_info->config.altsetting[0].endpoint.extra;
+    internal_info->config.interface[1].altsetting[0].extra_length
+      = internal_info->config.altsetting[0].endpoint.extra_length;
+  }
+
   ret = uvc_scan_control(dev, internal_info);
   if (ret != UVC_SUCCESS) {
     uvc_free_device_info(internal_info);
