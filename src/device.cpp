@@ -402,7 +402,7 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
     && internal_info->config->interface[1].altsetting[0].endpoint[0].extra
     && !internal_info->config->interface[1].altsetting[0].extra)
   {
-    internal_info->config->interface[1]->altsetting[0].extra_length
+    internal_info->config->interface[1].altsetting[0].extra_length
       = internal_info->config->interface[1].altsetting[0].endpoint[0].extra_length;
 
     const_cast<unsigned char *>(internal_info->config->interface[1].altsetting[0].extra)
