@@ -402,10 +402,12 @@ uvc_error_t uvc_get_device_info(uvc_device_t *dev,
     && internal_info->config->interface[1].altsetting[0].endpoint[0].extra
     && !internal_info->config->interface[1].altsetting[0].extra)
   {
-    internal_info->config->interface[1].altsetting[0].extra_length
+    libusb_interface_descriptor* non_const_altsetting = const_cast<libusb_interface_descriptor*>(&internal_info->config->interface[1].altsetting[0]);
+
+    non_const_altsetting->extra_length
       = internal_info->config->interface[1].altsetting[0].endpoint[0].extra_length;
 
-    const_cast<unsigned char *>(internal_info->config->interface[1].altsetting[0].extra)
+    non_const_altsetting->extra
       = internal_info->config->interface[1].altsetting[0].endpoint[0].extra;
   }
 
